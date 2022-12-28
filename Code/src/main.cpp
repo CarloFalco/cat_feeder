@@ -1,63 +1,195 @@
-#include <Arduino.h>
-#include <Servo.h>
+/*********
+  Complete project details at https://randomnerdtutorials.com  
+*********/
+
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+#include <DHT.h>
+
+#include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 
 #include <Wire.h>
 #include <SPI.h>
-#include <SD.h>
 
 
-#include "Adafruit_INA219.h"
-#include "SolarTrack.h"
-#include "LedTogle.h"
-#include "powerMeter.h"
 
+#ifdef ESP32
+  #include <WiFi.h>
+#else
+  #include <ESP8266WiFi.h>
+#endif
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>   // Universal Telegram Bot Library written by Brian Lough: https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
+#include <ArduinoJson.h>
+
+
+// Initialize Telegram BOT
+#define BOTtoken ""  // your Bot Token (Get from Botfather)
+
+// Use @myidbot to find out the chat ID of an individual or a group
+// Also note that you need to click "start" on a bot before it can
+// message you
+#define CHAT_ID ""
+
+#ifdef ESP8266
+  X509List cert(TELEGRAM_CERTIFICATE_ROOT);
+#endif
+
+WiFiClientSecure client;
+UniversalTelegramBot bot(BOTtoken, client);
+
+// Checks for new messages every 1 second.
+int botRequestDelay = 1000;
+unsigned long lastTimeBotRan;
+unsigned long lastTimeInp = millis();
+
+const int ledPin = 2;
+bool ledState;
+
+int pirPin = 16; // Input for HC-S501
+int pirStateK; 
+int pirStateKp; 
+
+// Creazione dei tasks
 unsigned long Count500ms;
 unsigned long PreviousCount500ms = 0;
 
 unsigned long Count1s;
 unsigned long PreviousCount1s = 0;
-
-void setup() {  
-
-  // Initialize the Serial comunication.
-  Serial.begin(115200);
-  
-  while (!Serial) {
-      // will pause Zero, Leonardo, etc until serial console opens
-      delay(1);  }
-
-  Serial.println("serial port inizialized");  
+//unsigned long lastTimeInp = millis();
 
 
+// Handle what happens when you receive new messages
+void handleNewMessages(int numNewMessages) {
+  Serial.println("handleNewMessages");
+  Serial.println(String(numNewMessages));
 
-  //ledTogle_PwrOn();
-  delay(50);
-  moveAxes_PwrOn();
-  delay(50);
-  powerMeter_PwrOn();
+  for (int i=0; i<numNewMessages; i++) {
+    // Chat id of the requester
+    String chat_id = String(bot.messages[i].chat_id);
+    if (chat_id != CHAT_ID){
+      bot.sendMessage(chat_id, "Unauthorized user", "");
+      continue;
+    }
+    
+    // Print the received message
+    String text = bot.messages[i].text;
+    Serial.println(text);
 
+    String from_name = bot.messages[i].from_name;
+
+    if (text == "/start") {
+      String welcome = "Welcome, " + from_name + ".\n";
+      welcome += "Use the following commands to control your outputs.\n\n";
+      welcome += "/led_on to turn GPIO ON \n";
+      welcome += "/led_off to turn GPIO OFF \n";
+      welcome += "/humidity give the humidity\n";
+      welcome += "/temperature give the temperature\n";
+      welcome += "/state to request current GPIO state \n";
+      bot.sendMessage(chat_id, welcome, "");
+    }
+
+    if (text == "/led_on") {
+      bot.sendMessage(chat_id, "LED state set to ON", "");
+      ledState = HIGH;
+      digitalWrite(ledPin, ledState);
+    }
+    
+    if (text == "/led_off") {
+      bot.sendMessage(chat_id, "LED state set to OFF", "");
+      ledState = LOW;
+      digitalWrite(ledPin, ledState);
+    }
+    if (text == "/humidity") {      
+      bot.sendMessage(chat_id, "LED state set to OFF", "");
+    }
+    if (text == "/state") {
+      if (digitalRead(ledPin)){
+        bot.sendMessage(chat_id, "LED is ON", "");
+      }
+      else{
+        bot.sendMessage(chat_id, "LED is OFF", "");
+      }
+    }
+  }
 }
 
 
-void loop() {
 
-  // TASK 500ms
+
+
+void setup() {
+    WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
+    // it is a good practice to make sure your code sets wifi mode how you want it.
+
+    // put your setup code here, to run once:
+    Serial.begin(115200);
+    
+    //WiFiManager, Local intialization. Once its business is done, there is no need to keep it around
+    WiFiManager wm;
+
+    // reset settings - wipe stored credentials for testing
+    // these are stored by the esp library
+    // wm.resetSettings();
+
+
+    bool res;
+    // res = wm.autoConnect(); // auto generated AP name from chipid
+    // res = wm.autoConnect("AutoConnectAP"); // anonymous ap
+    res = wm.autoConnect("CatF_Wifi","password"); // password protected ap
+
+    if(!res) {
+        Serial.println("Failed to connect");
+        // ESP.restart();
+    } 
+    else {
+        //if you get here you have connected to the WiFi    
+        Serial.println("connected...yeey :)");
+    }
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi..");
+  }
+  // Print ESP32 Local IP Address
+  Serial.println(WiFi.localIP());
+
+  #ifdef ESP32
+    client.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
+  #endif 
+
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, HIGH);
+
+  pinMode(pirPin, INPUT);
+
+}
+
+void loop() {
+  if (millis() > lastTimeBotRan + botRequestDelay)  {
+    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    while(numNewMessages) {
+      Serial.println("got response");
+      handleNewMessages(numNewMessages);
+      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    }
+    lastTimeBotRan = millis();
+  }
+
 
   Count500ms = millis();
   if (Count500ms - PreviousCount500ms > 500)
   { 
     PreviousCount500ms = Count500ms;  
-    moveAxes_tsk();
+
+    pirStateK = digitalRead(pirPin);
+    if (pirStateKp != pirStateK && pirStateK == 1){
+      digitalWrite(ledPin, pirStateK);
+      bot.sendMessage(CHAT_ID, "Motion Detected", "");
+      Serial.println("Motion Detected");
+    }
+
+    pirStateKp = pirStateK;
   }
 
-
-  // TASK 1s
-  Count1s = millis();
-  if (Count1s - PreviousCount1s > 1000)
-  {
-    PreviousCount1s = Count1s;
-    powerMeter_tsk();
-  }
-   
-  
 }
