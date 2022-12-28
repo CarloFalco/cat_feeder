@@ -2,10 +2,9 @@
   Complete project details at https://randomnerdtutorials.com  
 *********/
 
-#include <Wire.h>
+
 #include <Adafruit_Sensor.h>
-#include <Adafruit_BME280.h>
-#include <DHT.h>
+#include <ESP32Servo.h>
 
 #include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 
@@ -19,18 +18,18 @@
 #else
   #include <ESP8266WiFi.h>
 #endif
+
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>   // Universal Telegram Bot Library written by Brian Lough: https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
 #include <ArduinoJson.h>
 
 
-// Initialize Telegram BOT
-#define BOTtoken ""  // your Bot Token (Get from Botfather)
 
-// Use @myidbot to find out the chat ID of an individual or a group
-// Also note that you need to click "start" on a bot before it can
-// message you
-#define CHAT_ID ""
+// MY LIBRERIES
+#include <Feed.h>
+#include <pass.h>
+
+
 
 #ifdef ESP8266
   X509List cert(TELEGRAM_CERTIFICATE_ROOT);
@@ -58,6 +57,9 @@ unsigned long PreviousCount500ms = 0;
 unsigned long Count1s;
 unsigned long PreviousCount1s = 0;
 //unsigned long lastTimeInp = millis();
+
+int FeedCat = 0;
+
 
 
 // Handle what happens when you receive new messages
@@ -101,8 +103,10 @@ void handleNewMessages(int numNewMessages) {
       ledState = LOW;
       digitalWrite(ledPin, ledState);
     }
-    if (text == "/humidity") {      
-      bot.sendMessage(chat_id, "LED state set to OFF", "");
+    if (text == "/Feed") {      
+      bot.sendMessage(chat_id, "I will Feed the cat", "");
+      // TODO: andrebbe messa una variabile globale, in modo da non bloccare l'esecuzione del programma per 1 secondo qui
+      FeedCat = 1;
     }
     if (text == "/state") {
       if (digitalRead(ledPin)){
@@ -155,7 +159,8 @@ void setup() {
   Serial.println(WiFi.localIP());
 
   #ifdef ESP32
-    client.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
+  Serial.println("Sono passato da qui");
+  client.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
   #endif 
 
   pinMode(ledPin, OUTPUT);
@@ -163,9 +168,12 @@ void setup() {
 
   pinMode(pirPin, INPUT);
 
+  ServoFeed_PwrOn();
 }
 
 void loop() {
+
+
   if (millis() > lastTimeBotRan + botRequestDelay)  {
     int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
     while(numNewMessages) {
@@ -192,4 +200,11 @@ void loop() {
     pirStateKp = pirStateK;
   }
 
+  Count1s = millis();
+  if (Count1s - PreviousCount1s > 1000)
+  { 
+    PreviousCount1s = Count1s;
+
+    ServoFeed_tsk1S(&FeedCat);
+  }
 }
