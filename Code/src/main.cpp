@@ -43,10 +43,10 @@ int botRequestDelay = 1000;
 unsigned long lastTimeBotRan;
 unsigned long lastTimeInp = millis();
 
-const int ledPin = 2;
-bool ledState;
+const int ledPin = 4;
+bool ledState = 0;
 
-int pirPin = 16; // Input for HC-S501
+int pirPin = 2; // Input for HC-S501
 int pirStateK; 
 int pirStateKp; 
 
@@ -86,8 +86,7 @@ void handleNewMessages(int numNewMessages) {
       welcome += "Use the following commands to control your outputs.\n\n";
       welcome += "/led_on to turn GPIO ON \n";
       welcome += "/led_off to turn GPIO OFF \n";
-      welcome += "/humidity give the humidity\n";
-      welcome += "/temperature give the temperature\n";
+      welcome += "/feed give the foot to LASSE\n";
       welcome += "/state to request current GPIO state \n";
       bot.sendMessage(chat_id, welcome, "");
     }
@@ -103,7 +102,7 @@ void handleNewMessages(int numNewMessages) {
       ledState = LOW;
       digitalWrite(ledPin, ledState);
     }
-    if (text == "/Feed") {      
+    if (text == "/feed") {      
       bot.sendMessage(chat_id, "I will Feed the cat", "");
       // TODO: andrebbe messa una variabile globale, in modo da non bloccare l'esecuzione del programma per 1 secondo qui
       FeedCat = 1;
@@ -196,6 +195,8 @@ void loop() {
       bot.sendMessage(CHAT_ID, "Motion Detected", "");
       Serial.println("Motion Detected");
     }
+    // TODO: spegnere il led dopo un paio di secondi dal motion detected
+
 
     pirStateKp = pirStateK;
   }
