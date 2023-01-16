@@ -1,5 +1,18 @@
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
+#include "esp_camera.h"
+#include <UniversalTelegramBot.h>
+#include <ArduinoJson.h>
+#include <Wire.h>
 
+#include "pass.h"
 
+String BOTtoken = BOTtokenKey;
+
+bool flashState = LOW;
+bool motionDetected = false;
 
 
 String sendPhotoTelegram(){
@@ -121,4 +134,11 @@ void handleNewMessages(int numNewMessages){
       bot.sendMessage(chatId, welcome, "Markdown");
     }
   }
+}
+
+
+// Indicates when motion is detected
+static void IRAM_ATTR detectsMovement(void * arg){
+  //Serial.println("MOTION DETECTED!!!");
+  motionDetected = true;
 }
