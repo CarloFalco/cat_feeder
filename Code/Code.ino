@@ -10,6 +10,8 @@
 
 // #include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 
+//#define DEBUG_FEEDER
+
 #include <Wire.h>
 #include <SPI.h>
 
@@ -21,7 +23,9 @@
 
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>   // Universal Telegram Bot Library written by Brian Lough: https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
-#include <ArduinoJson.h>
+#include <ArduinoJson.h> //
+
+#include <ESP32Servo.h>// lireria per il controllo del servomotore
 
 #include "passMio.h"
 #include "camMio.h"
@@ -35,11 +39,24 @@ String BOTtoken = String(BOTtokenKey);
 
 bool sendPhoto = false;
 
-bool feedCat = false;
+
+#define FEED_COUNT 2
+#define SERVO_PIN 15
+int FeedCat = 0;
+
+int FeedCatKp = 0;
+int CountFeed = 0;
+
+Servo myservo;  // create servo object to control a servo
+
+
+
 bool flashState = LOW;
+
 // Motion Sensor
 bool motionDetected = false;
 bool shutUp = false;
+
 
 WiFiClientSecure clientTCP;
 UniversalTelegramBot bot(BOTtoken, clientTCP);
@@ -47,8 +64,14 @@ UniversalTelegramBot bot(BOTtoken, clientTCP);
 camera_config_t config;
 
 
+// variabili relative ai task
 int botRequestDelay = 1000;   // mean time between scan messages
 long lastTimeBotRan;     // last time messages' scan has been done
+unsigned long Count1s;
+unsigned long PreviousCount1s = 0;
+unsigned long Count1m;
+unsigned long PreviousCount1m = 0;
+
 
 void handleNewMessages(int numNewMessages);
 String sendPhotoTelegram();
@@ -56,9 +79,13 @@ String sendPhotoTelegram();
 
 // Indicates when motion is detected
 static void IRAM_ATTR detectsMovement(void * arg){
-  //Serial.println("MOTION DETECTED!!!");
-  if (shutUp){
-    motionDetected = true;
+  
+  if (!shutUp){
+    Serial.println("MOTION DETECTED!!!");
+    motionDetected = true;    
+  }
+  else {
+  Serial.println("MOTION DETECTED!!!, but disabled");
   }
 }
 
@@ -74,7 +101,7 @@ void setup(){
   clientTCP.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
 
   configInitCamera_PwrOn();
-
+  ServoFeed_PwrOn();
   // PIR Motion Sensor mode INPUT_PULLUP
   //err = gpio_install_isr_service(0); 
   esp_err_t err = gpio_isr_handler_add(GPIO_NUM_13, &detectsMovement, (void *) 13);  
@@ -95,18 +122,29 @@ void loop(){
     sendPhoto = false; 
   }
 
-  if(motionDetected){
-    bot.sendMessage(chatId, "Motion detected!!", "");
-    Serial.println("Motion Detected");
-    sendPhotoTelegram();
-    motionDetected = false;
+
+ 
+  if (millis() > 1000 + PreviousCount1s)// TASK 1s
+  {
+    ServoFeed_tsk1S(&FeedCat);    
+    PreviousCount1s = millis();
   }
-  if(feedCat){
-    Serial.println("Feeding cat .. ");
-    // Qui ci devo mettere la funzione che andra a far muovere il servomotore
-    feedCat = false; 
+
+  if (millis() > 60000 + PreviousCount1m) // TASK 1m
+  {
+  // questo voglio che venga fatto girare ad ogni secondo, forse meno
+    if(motionDetected){
+      bot.sendMessage(chatId, "Motion detected!!", "");
+      Serial.println("Motion Detected");
+      sendPhotoTelegram();
+      motionDetected = false;
+    }
+    PreviousCount1m = millis();
   }
-  if (millis() > lastTimeBotRan + botRequestDelay){
+
+
+  if (millis() > lastTimeBotRan + botRequestDelay) // TASK bot
+  {
     int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
     while (numNewMessages){
       Serial.println("got response");
@@ -117,6 +155,39 @@ void loop(){
   }
 }
 
+// in questa parte ci vado a mettere le funzioni
+
+void ServoFeed_tsk1S(int *FeedCat)
+{
+    if (FeedCatKp == 1 && *FeedCat == 0) {
+      FeedCatKp = 0;
+      myservo.write(95);
+      #ifdef DEBUG_FEEDER
+        Serial.print("Debug State = ");
+        Serial.println("3");
+      #endif
+    }  
+
+    if (*FeedCat == 1) {
+      FeedCatKp = 1;
+      myservo.write(85);
+      CountFeed = CountFeed + 1;
+
+      #ifdef DEBUG_FEEDER
+        Serial.print("Debug State = ");
+        Serial.println("1");
+      #endif
+
+      if (CountFeed > FEED_COUNT){
+        *FeedCat = 0;
+        CountFeed = 0;
+        #ifdef DEBUG_FEEDER
+            Serial.print("Debug State = ");
+            Serial.println("2");
+        #endif
+      }
+    }
+}
 
 String sendPhotoTelegram(){
   const char* myDomain = "api.telegram.org";
@@ -227,7 +298,7 @@ void handleNewMessages(int numNewMessages){
       Serial.println("New photo  request");
     }
     if (text == "/feed") {
-      feedCat = true;
+      FeedCat = true;
       bot.sendMessage(chatId, "I will feed the cat.\n", "Markdown");
     }
     if (text == "/shutup") {
@@ -249,6 +320,17 @@ void handleNewMessages(int numNewMessages){
       bot.sendMessage(chatId, welcome, "Markdown");
     }
   }
+}
+
+// funzioni power on
+void ServoFeed_PwrOn(void)
+{
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+  ESP32PWM::allocateTimer(2);
+  ESP32PWM::allocateTimer(3);
+  myservo.setPeriodHertz(50);    // standard 50 hz servo
+  myservo.attach(SERVO_PIN, 1000, 2000); // attaches the servo on pin 18 to the servo object
 }
 
 
