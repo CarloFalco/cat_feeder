@@ -10,7 +10,7 @@
 
 // #include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 
-//#define DEBUG_FEEDER
+#define DEBUG_FEEDER
 
 #include <Wire.h>
 #include <SPI.h>
@@ -35,8 +35,9 @@
 #include "esp_camera.h"
 
 String chatId = String(CHAT_ID);
+String chatId2 = String(CHAT_ID_2);
 String BOTtoken = String(BOTtokenKey);
-
+String sendPhotoReqID = String(CHAT_ID);
 bool sendPhoto = false;
 
 
@@ -55,7 +56,7 @@ bool flashState = LOW;
 
 // Motion Sensor
 bool motionDetected = false;
-bool shutUp = false;
+bool shutUp = true;
 
 
 WiFiClientSecure clientTCP;
@@ -67,9 +68,7 @@ camera_config_t config;
 // variabili relative ai task
 int botRequestDelay = 1000;   // mean time between scan messages
 long lastTimeBotRan;     // last time messages' scan has been done
-unsigned long Count1s;
 unsigned long PreviousCount1s = 0;
-unsigned long Count1m;
 unsigned long PreviousCount1m = 0;
 
 
@@ -112,10 +111,11 @@ void setup(){
   if (err != ESP_OK){
     Serial.printf("set intr type failed with error 0x%x \r\n", err);
   }
-  
+
 }
 
 void loop(){
+
   if (sendPhoto){
     Serial.println("Preparing photo");
     sendPhotoTelegram(); 
@@ -136,7 +136,7 @@ void loop(){
     if(motionDetected){
       bot.sendMessage(chatId, "Motion detected!!", "");
       Serial.println("Motion Detected");
-      sendPhotoTelegram();
+      sendPhoto = true; 
       motionDetected = false;
     }
     PreviousCount1m = millis();
@@ -161,7 +161,7 @@ void ServoFeed_tsk1S(int *FeedCat)
 {
     if (FeedCatKp == 1 && *FeedCat == 0) {
       FeedCatKp = 0;
-      myservo.write(95);
+      myservo.write(100);
       #ifdef DEBUG_FEEDER
         Serial.print("Debug State = ");
         Serial.println("3");
@@ -208,7 +208,7 @@ String sendPhotoTelegram(){
   if (clientTCP.connect(myDomain, 443)) {
     Serial.println("Connection successful");
 
-    String head = "--eof\r\nContent-Disposition: form-data; name=\"chat_id\"; \r\n\r\n" + chatId + "\r\n--eof\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"esp32-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
+    String head = "--eof\r\nContent-Disposition: form-data; name=\"chat_id\"; \r\n\r\n" + sendPhotoReqID + "\r\n--eof\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"esp32-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
     String tail = "\r\n--eof--\r\n";
 
     uint16_t imageLen = fb->len;
@@ -278,7 +278,7 @@ void handleNewMessages(int numNewMessages){
   for (int i = 0; i < numNewMessages; i++){
     // Chat id of the requester
     String chat_id = String(bot.messages[i].chat_id);
-    if (chat_id != chatId){
+    if ((chat_id != chatId) and (chat_id != chatId2)){
       bot.sendMessage(chat_id, "Unauthorized user", "");
       continue;
     }
@@ -295,19 +295,20 @@ void handleNewMessages(int numNewMessages){
     }
     if (text == "/photo") {
       sendPhoto = true;
+      sendPhotoReqID = String(bot.messages[i].chat_id);
       Serial.println("New photo  request");
     }
     if (text == "/feed") {
       FeedCat = true;
-      bot.sendMessage(chatId, "I will feed the cat.\n", "Markdown");
+      bot.sendMessage(chat_id, "I will feed the cat.\n", "Markdown");
     }
     if (text == "/shutup") {
       shutUp = true;
-      bot.sendMessage(chatId, "see you next time.\n", "Markdown");
+      bot.sendMessage(chat_id, "see you next time.\n", "Markdown");
     }
     if (text == "/dontshutup") {
       shutUp = false;
-      bot.sendMessage(chatId, "I here agian.\n", "Markdown");
+      bot.sendMessage(chat_id, "I here agian.\n", "Markdown");
     }
     if (text == "/start"){
       String welcome = "Welcome to the ESP32-CAM Telegram bot.\n";
@@ -317,7 +318,7 @@ void handleNewMessages(int numNewMessages){
       welcome += "/shutup : disalbe motion sensor notification\n";
       welcome += "/dontshutup : enable motion sensor notification\n";
       welcome += "You'll receive a photo whenever motion is detected.\n";
-      bot.sendMessage(chatId, welcome, "Markdown");
+      bot.sendMessage(chat_id, welcome, "Markdown");
     }
   }
 }
@@ -357,7 +358,7 @@ void configInitCamera_PwrOn(){
   config.pixel_format = PIXFORMAT_JPEG; //YUV422,GRAYSCALE,RGB565,JPEG
   config.grab_mode = CAMERA_GRAB_LATEST;
   config.frame_size = FRAMESIZE_SXGA; // FRAMESIZE_ + QVGA|CIF|VGA|SVGA|XGA|SXGA|UXGA
-  config.jpeg_quality = 10; //10-63 lower number means higher quality
+  config.jpeg_quality = 14; //10-63 lower number means higher quality
   config.fb_count = 2;
 
   
