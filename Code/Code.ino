@@ -1,12 +1,4 @@
-/*
-  Rui Santos
-  Complete project details at https://RandomNerdTutorials.com/esp32-cam-shield-pcb-telegram/
-  
-  Project created using Brian Lough's Universal Telegram Bot Library: https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
 
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
-*/
 
 // #include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 
@@ -39,7 +31,9 @@ bool sendPhoto = false;
 
 
 #define FEED_COUNT 2
-#define SERVO_PIN 15
+#define SERVO_PIN 13
+#define MOVE_PIN GPIO_NUM_14
+
 
 int FeedCat = 0;
 int FeedCatKp = 0;
@@ -101,20 +95,23 @@ void setup(){
 
   configInitCamera_PwrOn();
   ServoFeed_PwrOn();
+
+
   // PIR Motion Sensor mode INPUT_PULLUP
   //err = gpio_install_isr_service(0); 
-  esp_err_t err = gpio_isr_handler_add(GPIO_NUM_13, &detectsMovement, (void *) 13);  
+  esp_err_t err = gpio_isr_handler_add(MOVE_PIN, &detectsMovement, (void *) 13);  
   if (err != ESP_OK){
     #ifdef DEBUG_FEEDER
       Serial.printf("handler add failed with error 0x%x \r\n", err); 
     #endif
   }
-  err = gpio_set_intr_type(GPIO_NUM_13, GPIO_INTR_POSEDGE);
+  err = gpio_set_intr_type(MOVE_PIN, GPIO_INTR_POSEDGE);
   if (err != ESP_OK){
     #ifdef DEBUG_FEEDER
       Serial.printf("set intr type failed with error 0x%x \r\n", err);
     #endif
   }
+
   #ifdef DEBUG_Startup
   String welcome = "Welcome to the ESP32-CAM Telegram bot.\n";
   welcome += "/photo : takes a new photo\n";
@@ -143,7 +140,7 @@ void loop(){
     PreviousCount1s = millis();
   }
 
-  if (millis() > 60000 + PreviousCount1m) // TASK 1m
+  if (millis() > 60000 + PreviousCount1m) // TASK 6m
   {
   // questo voglio che venga fatto girare ad ogni secondo, forse meno
     if(motionDetected){
@@ -188,7 +185,7 @@ void ServoFeed_tsk1S(int *FeedCat)
 
     if (*FeedCat == 1) {
       FeedCatKp = 1;
-      myservo.write(85);
+      myservo.write(90);
       CountFeed = CountFeed + 1;
 
       #ifdef DEBUG_FEEDER
@@ -385,13 +382,12 @@ void configInitCamera_PwrOn(){
   config.pin_sscb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
+  config.xclk_freq_hz = 26000000;
   config.pixel_format = PIXFORMAT_JPEG; //YUV422,GRAYSCALE,RGB565,JPEG
   config.grab_mode = CAMERA_GRAB_LATEST;
   config.frame_size = FRAMESIZE_SVGA; // FRAMESIZE_ + QVGA|CIF|VGA|SVGA|XGA|SXGA|UXGA
   config.jpeg_quality = 16; //10-63 lower number means higher quality
   config.fb_count = 2;
-
   
   // Initialize the Camera
   esp_err_t err = esp_camera_init(&config);

@@ -1,0 +1,7 @@
+1 	hopper 				76g 	7h
+2	PortionWheel		41g		4h
+3	wheelCompartment	59g		5h
+4	electronic			151g	16h
+5	Blow 				146g	15h
+6	shel				214g	20h
+7 	lid					61g		5h
