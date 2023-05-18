@@ -382,12 +382,12 @@ void configInitCamera_PwrOn(){
   config.pin_sscb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 26000000;
+  config.xclk_freq_hz = 24000000;
   config.pixel_format = PIXFORMAT_JPEG; //YUV422,GRAYSCALE,RGB565,JPEG
   config.grab_mode = CAMERA_GRAB_LATEST;
-  config.frame_size = FRAMESIZE_SVGA; // FRAMESIZE_ + QVGA|CIF|VGA|SVGA|XGA|SXGA|UXGA
-  config.jpeg_quality = 16; //10-63 lower number means higher quality
-  config.fb_count = 2;
+  config.frame_size = FRAMESIZE_HD; // FRAMESIZE_ + QVGA|CIF|VGA|SVGA|XGA|SXGA|UXGA
+  config.jpeg_quality = 10; //10-63 lower number means higher quality
+  config.fb_count = 4;
   
   // Initialize the Camera
   esp_err_t err = esp_camera_init(&config);
