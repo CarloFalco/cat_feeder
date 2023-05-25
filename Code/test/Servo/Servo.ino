@@ -37,7 +37,7 @@
  */
 
 #include <ESP32Servo.h>
-#define SERVO_PIN 15
+#define SERVO_PIN 13
 
 Servo myservo;  // create servo object to control a servo
 
@@ -48,6 +48,7 @@ int pos = 0;
 void setup() {
   ServoFeed_PwrOn();
   Serial.begin(115200);
+  Serial.print("Ciao: ");
 	// using default min/max of 1000us and 2000us
 	// different servos may require different min/max settings
 	// for an accurate 0 to 180 sweep

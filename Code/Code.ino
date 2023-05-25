@@ -30,7 +30,7 @@ String sendPhotoReqID = String(CHAT_ID);
 bool sendPhoto = false;
 
 
-#define FEED_COUNT 2
+#define FEED_COUNT 3
 #define SERVO_PIN 13
 #define MOVE_PIN GPIO_NUM_14
 
@@ -58,7 +58,7 @@ camera_config_t config;
 long lastTimeBotRan;     // last time messages' scan has been done
 unsigned long PreviousCount1s = 0;
 unsigned long PreviousCount1m = 0;
-
+unsigned long PreviousCount200ms = 0;
 
 void handleNewMessages(int numNewMessages);
 String sendPhotoTelegram();
@@ -81,6 +81,7 @@ static void IRAM_ATTR detectsMovement(void * arg){
 }
 
 void setup(){
+  ServoFeed_PwrOn();
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); 
   #ifdef DEBUG_FEEDER
     Serial.begin(115200);
@@ -94,7 +95,7 @@ void setup(){
   clientTCP.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
 
   configInitCamera_PwrOn();
-  ServoFeed_PwrOn();
+  
 
 
   // PIR Motion Sensor mode INPUT_PULLUP
@@ -134,10 +135,17 @@ void loop(){
     sendPhotoTelegram(); 
     sendPhoto = false; 
   }
+  /*
   if (millis() > 1000 + PreviousCount1s)// TASK 1s
   {
     ServoFeed_tsk1S(&FeedCat);    
     PreviousCount1s = millis();
+  }
+  */
+  if (millis() > 200 + PreviousCount200ms)// TASK 1s
+  {
+    ServoFeed_tsk200mS(&FeedCat);    
+    PreviousCount200ms = millis();
   }
 
   if (millis() > 60000 + PreviousCount1m) // TASK 6m
@@ -172,11 +180,11 @@ void loop(){
 
 // in questa parte ci vado a mettere le funzioni
 
-void ServoFeed_tsk1S(int *FeedCat)
+void ServoFeed_tsk200mS(int *FeedCat)
 {
     if (FeedCatKp == 1 && *FeedCat == 0) {
       FeedCatKp = 0;
-      myservo.write(100);
+      myservo.write(90);
       #ifdef DEBUG_FEEDER
         Serial.print("Debug State = ");
         Serial.println("3");
@@ -184,8 +192,9 @@ void ServoFeed_tsk1S(int *FeedCat)
     }  
 
     if (*FeedCat == 1) {
+      Serial.println(millis());
       FeedCatKp = 1;
-      myservo.write(90);
+      myservo.write(95);
       CountFeed = CountFeed + 1;
 
       #ifdef DEBUG_FEEDER
@@ -360,6 +369,8 @@ void ServoFeed_PwrOn(void)
   ESP32PWM::allocateTimer(3);
   myservo.setPeriodHertz(50);    // standard 50 hz servo
   myservo.attach(SERVO_PIN, 1000, 2000); // attaches the servo on pin 18 to the servo object
+
+  myservo.write(90);
 }
 
 
