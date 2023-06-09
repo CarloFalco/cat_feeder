@@ -1,211 +1,181 @@
-/*********
-  Complete project details at https://randomnerdtutorials.com  
-*********/
+#define DEBUG_FEEDER
+#define DEBUG_Startup
 
-
-#include <Adafruit_Sensor.h>
-#include <ESP32Servo.h>
-
-#include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 
 #include <Wire.h>
 #include <SPI.h>
 
 
-
-#ifdef ESP32
-  #include <WiFi.h>
-#else
-  #include <ESP8266WiFi.h>
-#endif
-
+#include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>   // Universal Telegram Bot Library written by Brian Lough: https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
-#include <ArduinoJson.h>
+#include <ArduinoJson.h> //
 
+#include <ESP32Servo.h>// lireria per il controllo del servomotore
 
-
-// MY LIBRERIES
+#include "passMio.h"
+#include <MyFcn.h>
 #include <Feed.h>
-#include <pass.h>
 
 
-
-#ifdef ESP8266
-  X509List cert(TELEGRAM_CERTIFICATE_ROOT);
-#endif
-
-WiFiClientSecure client;
-UniversalTelegramBot bot(BOTtoken, client);
-
-// Checks for new messages every 1 second.
-int botRequestDelay = 1000;
-unsigned long lastTimeBotRan;
-unsigned long lastTimeInp = millis();
-
-const int ledPin = 4;
-bool ledState = 0;
-
-int pirPin = 2; // Input for HC-S501
-int pirStateK; 
-int pirStateKp; 
-
-// Creazione dei tasks
-unsigned long Count500ms;
-unsigned long PreviousCount500ms = 0;
-
-unsigned long Count1s;
-unsigned long PreviousCount1s = 0;
-//unsigned long lastTimeInp = millis();
-
-int FeedCat = 0;
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
+#include "esp_camera.h"
 
 
-
-// Handle what happens when you receive new messages
-void handleNewMessages(int numNewMessages) {
-  Serial.println("handleNewMessages");
-  Serial.println(String(numNewMessages));
-
-  for (int i=0; i<numNewMessages; i++) {
-    // Chat id of the requester
-    String chat_id = String(bot.messages[i].chat_id);
-    if (chat_id != CHAT_ID){
-      bot.sendMessage(chat_id, "Unauthorized user", "");
-      continue;
-    }
-    
-    // Print the received message
-    String text = bot.messages[i].text;
-    Serial.println(text);
-
-    String from_name = bot.messages[i].from_name;
-
-    if (text == "/start") {
-      String welcome = "Welcome, " + from_name + ".\n";
-      welcome += "Use the following commands to control your outputs.\n\n";
-      welcome += "/led_on to turn GPIO ON \n";
-      welcome += "/led_off to turn GPIO OFF \n";
-      welcome += "/feed give the foot to LASSE\n";
-      welcome += "/state to request current GPIO state \n";
-      bot.sendMessage(chat_id, welcome, "");
-    }
-
-    if (text == "/led_on") {
-      bot.sendMessage(chat_id, "LED state set to ON", "");
-      ledState = HIGH;
-      digitalWrite(ledPin, ledState);
-    }
-    
-    if (text == "/led_off") {
-      bot.sendMessage(chat_id, "LED state set to OFF", "");
-      ledState = LOW;
-      digitalWrite(ledPin, ledState);
-    }
-    if (text == "/feed") {      
-      bot.sendMessage(chat_id, "I will Feed the cat", "");
-      // TODO: andrebbe messa una variabile globale, in modo da non bloccare l'esecuzione del programma per 1 secondo qui
-      FeedCat = 1;
-    }
-    if (text == "/state") {
-      if (digitalRead(ledPin)){
-        bot.sendMessage(chat_id, "LED is ON", "");
-      }
-      else{
-        bot.sendMessage(chat_id, "LED is OFF", "");
-      }
-    }
-  }
-}
-
-
-
-
+// Definisco le classi
+TaskHandle_t task1Handle;
+TaskHandle_t task2Handle;
+TaskHandle_t task3Handle;
+Servo myServo =  //TODO
 
 void setup() {
-    WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
-    // it is a good practice to make sure your code sets wifi mode how you want it.
-
-    // put your setup code here, to run once:
+  // Inizializza il serial monitor
+  #ifdef DEBUG_FEEDER
     Serial.begin(115200);
-    
-    //WiFiManager, Local intialization. Once its business is done, there is no need to keep it around
-    WiFiManager wm;
-
-    // reset settings - wipe stored credentials for testing
-    // these are stored by the esp library
-    // wm.resetSettings();
-
-
-    bool res;
-    // res = wm.autoConnect(); // auto generated AP name from chipid
-    // res = wm.autoConnect("AutoConnectAP"); // anonymous ap
-    res = wm.autoConnect("CatF_Wifi","password"); // password protected ap
-
-    if(!res) {
-        Serial.println("Failed to connect");
-        // ESP.restart();
-    } 
-    else {
-        //if you get here you have connected to the WiFi    
-        Serial.println("connected...yeey :)");
-    }
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi..");
-  }
-  // Print ESP32 Local IP Address
-  Serial.println(WiFi.localIP());
-
-  #ifdef ESP32
-  Serial.println("Sono passato da qui");
-  client.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
-  #endif 
-
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, HIGH);
-
-  pinMode(pirPin, INPUT);
-
+    while (!Serial);
+  #endif
   ServoFeed_PwrOn();
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); 
+  Led_PwrOn();
+
+
+
+
+  IR_PwrOn();
+  // Crea i task
+  Scheduler_PwrOn();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+  initWiFi_PwrOn(SSID, PASSWORD);
+  
+
+  clientTCP.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
+
+  configInitCamera_PwrOn();
+  
+
+
+  // PIR Motion Sensor mode INPUT_PULLUP
+  //err = gpio_install_isr_service(0); 
+  esp_err_t err = gpio_isr_handler_add(MOVE_PIN, &detectsMovement, (void *) 13);  
+  if (err != ESP_OK){
+    #ifdef DEBUG_FEEDER
+      Serial.printf("handler add failed with error 0x%x \r\n", err); 
+    #endif
+  }
+  err = gpio_set_intr_type(MOVE_PIN, GPIO_INTR_POSEDGE);
+  if (err != ESP_OK){
+    #ifdef DEBUG_FEEDER
+      Serial.printf("set intr type failed with error 0x%x \r\n", err);
+    #endif
+  }
+
+  #ifdef DEBUG_Startup
+  String welcome = "Welcome to the ESP32-CAM Telegram bot.\n";
+  welcome += "/photo : takes a new photo\n";
+  welcome += "/flash : toggle flash LED\n";
+  welcome += "/feed : feed the cat\n";
+  welcome += "/shutup : disalbe motion sensor notification\n";
+  welcome += "/dontshutup : enable motion sensor notification\n";
+  welcome += "You'll receive a photo whenever motion is detected.\n";
+  bot.sendMessage(chatId, welcome, "Markdown");
+  #endif
+
+
+
+
+
+
+
 }
 
+
+
+
+void task1(void* pvParameters) {
+  TickType_t lastWakeTime = xTaskGetTickCount();
+  const TickType_t period = pdMS_TO_TICKS(1000);  // 1 secondo
+
+  while (true) {
+    // Esegui il codice del task 1
+
+
+    vTaskDelayUntil(&lastWakeTime, period);
+  }
+}
+
+void task2(void* pvParameters) {
+  TickType_t lastWakeTime = xTaskGetTickCount();
+  const TickType_t period = pdMS_TO_TICKS(500);  // 500 millisecondi
+
+  while (true) {
+    // Esegui il codice del task 2
+
+    vTaskDelayUntil(&lastWakeTime, period);
+  }
+}
+
+void task3(void* pvParameters) {
+  TickType_t lastWakeTime = xTaskGetTickCount();
+  const TickType_t period = pdMS_TO_TICKS(200);  // 200 millisecondi
+
+  while (true) {
+    // Esegui il codice del task 3
+    IR_Tsk(pinState);
+
+    vTaskDelayUntil(&lastWakeTime, period);
+  }
+}
+
+
 void loop() {
+  // Il loop principale non fa nulla
+}
 
+// CONDIZIONI INIZIALI//
+void Scheduler_PwrOn(void)
+{
+  xTaskCreatePinnedToCore(
+                    task1,   // Task function.
+                    "Task1",     // name of task.
+                    2048,       // Stack size of task
+                    NULL,        // parameter of the task
+                    1,           // priority of the task 
+                    &task1Handle,      // Task handle to keep track of created task
+                    1);          // pin task to core 0                 
+  
+  xTaskCreatePinnedToCore(
+                    task2,   // Task function.
+                    "Task2",     // name of task. 
+                    2048,       // Stack size of task 
+                    NULL,        // parameter of the task 
+                    1,           // priority of the task 
+                    &task2Handle,      // Task handle to keep track of created task 
+                    1);          // pin task to core 1
 
-  if (millis() > lastTimeBotRan + botRequestDelay)  {
-    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-    while(numNewMessages) {
-      Serial.println("got response");
-      handleNewMessages(numNewMessages);
-      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-    }
-    lastTimeBotRan = millis();
-  }
-
-
-  Count500ms = millis();
-  if (Count500ms - PreviousCount500ms > 500)
-  { 
-    PreviousCount500ms = Count500ms;  
-
-    pirStateK = digitalRead(pirPin);
-    if (pirStateKp != pirStateK && pirStateK == 1){
-      digitalWrite(ledPin, pirStateK);
-      bot.sendMessage(CHAT_ID, "Motion Detected", "");
-      Serial.println("Motion Detected");
-    }
-    // TODO: spegnere il led dopo un paio di secondi dal motion detected
-
-
-    pirStateKp = pirStateK;
-  }
-
-  Count1s = millis();
-  if (Count1s - PreviousCount1s > 1000)
-  { 
-    PreviousCount1s = Count1s;
-
-    ServoFeed_tsk1S(&FeedCat);
-  }
+  xTaskCreatePinnedToCore(
+                    task3,   // Task function.
+                    "Task3",     // name of task. 
+                    2048,       // Stack size of task 
+                    NULL,        // parameter of the task 
+                    1,           // priority of the task 
+                    &task3Handle,      // Task handle to keep track of created task 
+                    1);          // pin task to core 1
 }
