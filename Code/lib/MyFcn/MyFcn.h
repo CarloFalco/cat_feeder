@@ -45,18 +45,7 @@ typedef struct {
   bool stateFlash;          // stato flash
 } MyStruct;
 
-MyStruct myStruct = {
-                      String(BOTtokenKey),
-                      {String(CHAT_ID_1), String(CHAT_ID_2), String(""), String("")},
-                      {1, 1, 1, 1}, 
-                      String(""),
-                      false, //stateIRpin
-                      false, //stateSendPhoto
-                      false, //stateFeedCat
-                      LOW  // stato flash
-                      };
 
-// esempio di come si struttura una libreria
 
 // funzioni di inizializzazione
 void IR_PwrOn();
@@ -64,6 +53,7 @@ void initWiFi_PwrOn(const char* , const char* );
 void configInitCamera_PwrOn();
 void Led_PwrOn();
 void ServoFeed_PwrOn(void);
+void ServoFeed_Tsk(int);
 
 // FUNZIONI nei task
 void IR_Tsk(int& );
@@ -71,4 +61,4 @@ void handleNewMessages(int);
 void ServoFeed_tsk1S(int *FeedCat);
 
 
-#endif
+#endif // #ifndef MYFCN_H

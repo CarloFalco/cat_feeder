@@ -1,7 +1,37 @@
 #include "MyFcn.h"    
 #include <ESP32Servo.h>
 
+#include <Wire.h>
+#include <SPI.h>
+
 #include "Arduino.h"  
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>   // Universal Telegram Bot Library written by Brian Lough: https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
+#include <ArduinoJson.h> //
+
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
+#include "esp_camera.h"
+
+
+MyStruct myStruct = {
+                       String(BOTtokenKey),
+                       String(""),
+                       {String(CHAT_ID_1), String(CHAT_ID_2), String(""), String("")},
+                       {1, 1, 1, 1},
+                       false, //stateIRpin
+                       false, //stateSendPhoto
+                       false, //stateFeedCat
+                       LOW  // stato flash
+                       };
+
+
+WiFiClientSecure clientTCP;
+
+UniversalTelegramBot bot(myStruct.BOTtoken, clientTCP);
+//Stores the camera configuration parameters
+camera_config_t config;
 
 
 int pinStateCurrent   = LOW; // current state of pin
@@ -13,6 +43,8 @@ int CountFeed = 0;
 const int PIN_TO_SENSOR = 34;
 
 Servo myservo;  // create servo object to control a servo
+
+
 
 
 // esempio di passaggio tra interno al flie e mondo esterno 
@@ -32,6 +64,10 @@ void IR_Tsk(int& pinStatePrevious)
 
 }
 
+void ServoFeed_Tsk(int ServoPosition)
+{
+  myservo.write(ServoPosition); ; // attaches the servo on pin 18 to the servo object
+}
 
 
 
@@ -49,8 +85,10 @@ void handleNewMessages(int numNewMessages){
 
     // verifico che sia un utente autorizzato
     int checkIdAuth = 0;
-    for (int j = 0; j < sizeof(myStruct.AuthId); j++){ // TODO
-      if ((chat_id == myStruct.AuthId[j]){
+    int j = 0;
+    for (j = 0; j < sizeof(myStruct.AuthId); j++){ // TODO
+      if (chat_id == myStruct.AuthId[j])
+      {
         checkIdAuth = 1;
         break;
       }
@@ -135,6 +173,7 @@ void ServoFeed_tsk1S(int *FeedCat)
 }
 
 
+
 // FUNZIONI DI INIZIALIZZAZIONE
 // funzioni power on
 
@@ -143,17 +182,6 @@ void Led_PwrOn(void)
   pinMode(FLASH_LED_PIN, OUTPUT);
   digitalWrite(FLASH_LED_PIN, myStruct.stateFlash);
 }
-
-void ServoFeed_PwrOn(void)
-{
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  ESP32PWM::allocateTimer(2);
-  ESP32PWM::allocateTimer(3);
-  myservo.setPeriodHertz(50);    // standard 50 hz servo
-  myservo.attach(SERVO_PIN, 1000, 2000); // attaches the servo on pin 18 to the servo object
-}
-
 
 void configInitCamera_PwrOn(void){
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -170,8 +198,8 @@ void configInitCamera_PwrOn(void){
   config.pin_pclk = PCLK_GPIO_NUM;
   config.pin_vsync = VSYNC_GPIO_NUM;
   config.pin_href = HREF_GPIO_NUM;
-  config.pin_sscb_sda = SIOD_GPIO_NUM;
-  config.pin_sscb_scl = SIOC_GPIO_NUM;
+  config.pin_sccb_sda = SIOD_GPIO_NUM;
+  config.pin_sccb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 24000000;
@@ -215,7 +243,6 @@ void configInitCamera_PwrOn(void){
   s->set_colorbar(s, 0);       // 0 = disable , 1 = enable
 }
 
-
 void ServoFeed_PwrOn(void)
 {
   ESP32PWM::allocateTimer(0);
@@ -228,7 +255,6 @@ void ServoFeed_PwrOn(void)
   myservo.write(90);
 }
 
-
 void IR_PwrOn(void)
 {
   // definizione tipologia pin
@@ -236,8 +262,6 @@ void IR_PwrOn(void)
   // condizione iniziale IR
   pinStateCurrent = digitalRead(PIN_TO_SENSOR);
 }
-
-
 
 void initWiFi_PwrOn(const char* ssid, const char* password) {
   WiFi.mode(WIFI_STA);
