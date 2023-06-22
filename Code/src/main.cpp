@@ -8,7 +8,7 @@ TaskHandle_t task2Handle;
 TaskHandle_t task3Handle;
 
 //  pins
-const int RedLED = 12;
+const int RedLED = 4;
 const int GreenLED = 14;
 
 int x = 0;
