@@ -1,11 +1,5 @@
-<<<<<<< HEAD
-/Code/passMio.h
-/code/camMio.h
-Code/debug_custom.json
-Code/esp32.svd
-Code/debug.cfg
-Code/test/CameraWebServer
-=======
 /Code/test/
 /Code/lib/passMio/passMio.h
->>>>>>> develop_1
+/File3D
+/Code/.gitignore
+/bck.cpp
