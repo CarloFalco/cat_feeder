@@ -6,6 +6,7 @@
 
 #define FLASH_LED_PIN     4
 
+#define WIFI_TIMEOUT_MS 20000
 //CAMERA_MODEL_AI_THINKER
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
@@ -27,11 +28,12 @@
 
 // SERVOMOTORE
 #define FEED_COUNT 2
-#define SERVO_PIN 15
+#define SERVO_PIN 13
 #define SERVO_MOVE_ON 90
 #define SERVO_MOVE_OFF 95
 
 
+#define DEBUG_WIFI
 
 typedef struct {
   // in case of fail std::string name1[4];

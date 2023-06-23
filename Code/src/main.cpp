@@ -5,20 +5,23 @@
 #include "passMio.h"
 #include "MyFcn.h"
 
+#include <ESP32Servo.h>
+#include <WiFi.h>
+
 
 TaskHandle_t task1Handle;
 TaskHandle_t task2Handle;
 TaskHandle_t task3Handle;
-
+TaskHandle_t task4Handle;
 //  pins
 
 void Scheduler_PwrOn(void);
 
 // DEBUG stuff
 #define DEBUG_SERVO
+//#define DEBUG_WIFI
 
-
-
+//
 
 ////////////////////////////////////////////////////////////////
 
@@ -27,17 +30,53 @@ void setup() {
   Serial.begin(115200);
   Serial.println("********************************");
   Serial.println("Hello, world!");
-  //initWiFi_PwrOn(NETWORK_SSID, PASSWORD);
+  initWiFi_PwrOn(NETWORK_SSID, PASSWORD);
 
 
-  //Led_PwrOn();
-  //ServoFeed_PwrOn();
+  Led_PwrOn();
+  ServoFeed_PwrOn();
 
 
   // Crea i task
   Scheduler_PwrOn();
 }
 
+void KeepWiFiAlive(void* pvParameters)
+{
+  for (;;)
+  {
+    if (WiFi.status() == WL_CONNECTED)
+    { 
+      #ifdef DEBUG_WIFI
+        Serial.println("Wifi still connected");
+      #endif
+      vTaskDelay(10000/portTICK_PERIOD_MS);
+      continue;  
+    }
+    #ifdef DEBUG_WIFI
+      Serial.println("WiFi is connecting");
+    #endif
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(NETWORK_SSID, PASSWORD);
+
+    unsigned long startAttemptTime = millis();
+
+    // Keep looping while we're not connected and haven't reached the timeout
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS){}
+
+    if (WiFi.status() != WL_CONNECTED){
+      #ifdef DEBUG_WIFI
+        Serial.println("WiFi Failed");
+      #endif
+      vTaskDelay(20000/portTICK_PERIOD_MS);
+      continue;
+    }
+    #ifdef DEBUG_WIFI
+      Serial.println("Wifi Connected: " + WiFi.localIP());
+    #endif
+
+  }
+}
 
 void task1(void* pvParameters) {
   TickType_t lastWakeTime = xTaskGetTickCount();
@@ -88,16 +127,18 @@ void task3(void* pvParameters) {
 
 void loop() {
   // Il loop principale non fa nulla
-  Serial.println("Hello, world!");
+
   #ifdef DEBUG_SERVO
     if (Serial.available() > 0)
     {
       int number = Serial.parseInt();
-      Serial.println(number);
-      ServoFeed_Tsk(number);
+      if (number>0)
+        {
+          ServoFeed_Tsk(number);
+        }
     }
   #endif
-  delay(1000);
+
   
 }
 
@@ -130,5 +171,14 @@ void Scheduler_PwrOn(void)
                     NULL,        // parameter of the task 
                     1,           // priority of the task 
                     &task3Handle,      // Task handle to keep track of created task 
+                    1);          // pin task to core 1
+                    
+  xTaskCreatePinnedToCore(
+                    KeepWiFiAlive,
+                    "Keep WiFi Alive",     // name of task. 
+                    2048,       // Stack size of task 
+                    NULL,        // parameter of the task 
+                    1,           // priority of the task 
+                    &task4Handle,      // Task handle to keep track of created task 
                     1);          // pin task to core 1
 }

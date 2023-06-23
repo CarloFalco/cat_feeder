@@ -15,6 +15,7 @@
 #include "esp_camera.h"
 
 
+
 MyStruct myStruct = {
                        String(BOTtokenKey),
                        String(""),
@@ -66,7 +67,9 @@ void IR_Tsk(int& pinStatePrevious)
 
 void ServoFeed_Tsk(int ServoPosition)
 {
-  myservo.write(ServoPosition); ; // attaches the servo on pin 18 to the servo object
+  Serial.print("ServoPosition: ");
+  Serial.println(ServoPosition);
+  myservo.write(ServoPosition);
 }
 
 
@@ -174,6 +177,10 @@ void ServoFeed_tsk1S(int *FeedCat)
 
 
 
+
+
+
+
 // FUNZIONI DI INIZIALIZZAZIONE
 // funzioni power on
 
@@ -270,12 +277,16 @@ void initWiFi_PwrOn(const char* ssid, const char* password) {
   // Attesa della connessione
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
-    #ifdef DEBUG_FEEDER
+    #ifdef DEBUG_WIFI
       Serial.println("Connessione in corso...");
     #endif
   }
-  #ifdef DEBUG_FEEDER
-    Serial.println("Connesso a " + String(SSID));
+  #ifdef DEBUG_WIFI
+    Serial.println("WiFi connected to " + String(ssid));
+    Serial.println(WiFi.localIP());
   #endif
+
+
+
 }
 
