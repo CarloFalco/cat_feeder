@@ -6,16 +6,18 @@
 
 #include "Arduino.h"  
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <UniversalTelegramBot.h>   // Universal Telegram Bot Library written by Brian Lough: https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
-#include <ArduinoJson.h> //
+
 
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 #include "esp_camera.h"
 
 
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>   // Universal Telegram Bot Library written by Brian Lough: https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
+#include <ArduinoJson.h> //
 
+//
 MyStruct myStruct = {
                        String(BOTtokenKey),
                        String(""),
@@ -28,9 +30,12 @@ MyStruct myStruct = {
                        };
 
 
-WiFiClientSecure clientTCP;
+String BOTtoken = String(BOTtokenKey);
 
-UniversalTelegramBot bot(myStruct.BOTtoken, clientTCP);
+WiFiClientSecure clientTCP;                      
+UniversalTelegramBot bot(BOTtoken, clientTCP);
+
+
 //Stores the camera configuration parameters
 camera_config_t config;
 
@@ -56,7 +61,7 @@ void IR_Tsk(int& pinStatePrevious)
 
   if (pinStatePrevious == LOW && pinStateCurrent == HIGH) {   // pin state change: LOW -> HIGH
     Serial.println("Motion detected!");
-    // TODO: turn on alarm, light or activate a device ... here
+    myStruct.stateIRpin = true; // Comunico che ho visto un movimento (poi posso mandare la foto)
   }
   else
   if (pinStatePrevious == HIGH && pinStateCurrent == LOW) {   // pin state change: HIGH -> LOW
@@ -71,8 +76,6 @@ void ServoFeed_Tsk(int ServoPosition)
   Serial.println(ServoPosition);
   myservo.write(ServoPosition);
 }
-
-
 
 void handleNewMessages(int numNewMessages){
   #ifdef DEBUG_FEEDER
@@ -175,11 +178,20 @@ void ServoFeed_tsk1S(int *FeedCat)
     }
 }
 
-
-
-
-
-
+void checkNewMessage(void) {
+      // Esegui il codice del task 1
+    
+    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    Serial.print("Check New Message: ");  
+    Serial.println(numNewMessages);  
+    while (numNewMessages){
+      #ifdef DEBUG_FEEDER
+        Serial.println("got response");
+      #endif
+      handleNewMessages(numNewMessages);
+      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    }
+}
 
 // FUNZIONI DI INIZIALIZZAZIONE
 // funzioni power on

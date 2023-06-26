@@ -9,6 +9,7 @@
 #include <WiFi.h>
 
 
+
 TaskHandle_t task1Handle;
 TaskHandle_t task2Handle;
 TaskHandle_t task3Handle;
@@ -17,13 +18,8 @@ TaskHandle_t task4Handle;
 
 void Scheduler_PwrOn(void);
 
-// DEBUG stuff
-#define DEBUG_SERVO
-//#define DEBUG_WIFI
 
-//
-
-////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
 
 void setup() {
   // Inizializza il serial monitor
@@ -41,8 +37,7 @@ void setup() {
   Scheduler_PwrOn();
 }
 
-void KeepWiFiAlive(void* pvParameters)
-{
+/* void KeepWiFiAlive(void* pvParameters){// 10 secondo
   for (;;)
   {
     if (WiFi.status() == WL_CONNECTED)
@@ -77,25 +72,22 @@ void KeepWiFiAlive(void* pvParameters)
 
   }
 }
+ */
 
-void task1(void* pvParameters) {
+void task1(void* pvParameters) {// 1 secondo
   TickType_t lastWakeTime = xTaskGetTickCount();
-  const TickType_t period = pdMS_TO_TICKS(1000);  // 1 secondo
+  const TickType_t period = pdMS_TO_TICKS(1000);  
 
   while (true) {
-    // Esegui il codice del task 1
-
-
-
-
+    checkNewMessage();
 
     vTaskDelayUntil(&lastWakeTime, period);
   }
 }
 
-void task2(void* pvParameters) {
+void task2(void* pvParameters) {// 500 millisecondi
   TickType_t lastWakeTime = xTaskGetTickCount();
-  const TickType_t period = pdMS_TO_TICKS(500);  // 500 millisecondi
+  const TickType_t period = pdMS_TO_TICKS(500);  
 
   while (true) {
     // Esegui il codice del task 2
@@ -107,9 +99,9 @@ void task2(void* pvParameters) {
   }
 }
 
-void task3(void* pvParameters) {
+void task3(void* pvParameters) {// 200 millisecondi
   TickType_t lastWakeTime = xTaskGetTickCount();
-  const TickType_t period = pdMS_TO_TICKS(200);  // 200 millisecondi
+  const TickType_t period = pdMS_TO_TICKS(200);  
 
   while (true) {
     // Esegui il codice del task 3
@@ -172,13 +164,14 @@ void Scheduler_PwrOn(void)
                     1,           // priority of the task 
                     &task3Handle,      // Task handle to keep track of created task 
                     1);          // pin task to core 1
-                    
+/*                    
   xTaskCreatePinnedToCore(
-                    KeepWiFiAlive,
+                     KeepWiFiAlive,
                     "Keep WiFi Alive",     // name of task. 
                     2048,       // Stack size of task 
                     NULL,        // parameter of the task 
                     1,           // priority of the task 
                     &task4Handle,      // Task handle to keep track of created task 
-                    1);          // pin task to core 1
+                    1);          // pin task to core 1 
+                    */
 }

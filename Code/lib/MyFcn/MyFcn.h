@@ -33,7 +33,12 @@
 #define SERVO_MOVE_OFF 95
 
 
+// DEBUG stuff
 #define DEBUG_WIFI
+#define DEBUG_FEEDER
+#define DEBUG_SERVO
+
+
 
 typedef struct {
   // in case of fail std::string name1[4];
@@ -56,6 +61,7 @@ void configInitCamera_PwrOn();
 void Led_PwrOn();
 void ServoFeed_PwrOn(void);
 void ServoFeed_Tsk(int);
+void checkNewMessage(void);
 
 // FUNZIONI nei task
 void IR_Tsk(int& );
