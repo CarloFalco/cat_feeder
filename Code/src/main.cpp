@@ -9,7 +9,6 @@
 #include <WiFi.h>
 
 
-
 TaskHandle_t task1Handle;
 TaskHandle_t task2Handle;
 TaskHandle_t task3Handle;
@@ -28,10 +27,12 @@ void setup() {
   Serial.println("Hello, world!");
   initWiFi_PwrOn(NETWORK_SSID, PASSWORD);
 
+  
 
   Led_PwrOn();
   ServoFeed_PwrOn();
 
+  configInitCamera_PwrOn();
 
   // Crea i task
   Scheduler_PwrOn();

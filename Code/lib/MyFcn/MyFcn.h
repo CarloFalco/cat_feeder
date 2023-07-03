@@ -60,10 +60,11 @@ void initWiFi_PwrOn(const char* , const char* );
 void configInitCamera_PwrOn();
 void Led_PwrOn();
 void ServoFeed_PwrOn(void);
-void ServoFeed_Tsk(int);
-void checkNewMessage(void);
+
 
 // FUNZIONI nei task
+void ServoFeed_Tsk(int);
+void checkNewMessage(void);
 void IR_Tsk(int& );
 void handleNewMessages(int);
 void ServoFeed_tsk1S(int *FeedCat);

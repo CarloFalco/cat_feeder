@@ -17,6 +17,8 @@
 #include <UniversalTelegramBot.h>   // Universal Telegram Bot Library written by Brian Lough: https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
 #include <ArduinoJson.h> //
 
+#include "TelegramCertificate.h"
+
 //
 MyStruct myStruct = {
                        String(BOTtokenKey),
@@ -193,6 +195,13 @@ void checkNewMessage(void) {
     }
 }
 
+
+
+
+
+
+
+
 // FUNZIONI DI INIZIALIZZAZIONE
 // funzioni power on
 
@@ -285,6 +294,7 @@ void IR_PwrOn(void)
 void initWiFi_PwrOn(const char* ssid, const char* password) {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
+  clientTCP.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
 
   // Attesa della connessione
   while (WiFi.status() != WL_CONNECTED) {
@@ -293,6 +303,7 @@ void initWiFi_PwrOn(const char* ssid, const char* password) {
       Serial.println("Connessione in corso...");
     #endif
   }
+  
   #ifdef DEBUG_WIFI
     Serial.println("WiFi connected to " + String(ssid));
     Serial.println(WiFi.localIP());
