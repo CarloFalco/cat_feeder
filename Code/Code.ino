@@ -21,12 +21,14 @@
 // FLASH
 #define FLASH_LED_PIN 4
 // SERVOMOTORE
-#define FEED_COUNT 2
+#define FEED_MAX_COUNT 6
 #define SERVO_PIN 13
 #define SERVO_MOVE_ON 95
 #define SERVO_MOVE_OFF 90
 // SENSORE IR
 #define IR_PIN 14
+#define IR_DELAY 60 // tempo di delay tra un rilevamento ed un altro
+
 
 // DEFINE FOR DEBUG
 #define DEBUG_WIFI
@@ -39,7 +41,6 @@ TaskHandle_t task2Handle;
 TaskHandle_t task3Handle;
 
 typedef struct {
-  // in case of fail std::string name1[4];
   String CurrentPhotoReqId;      // ID del utente che ha richiesto la foto
   String AuthId[4];         // ID degli utenti
   bool NotificationId[4];   // Flag di abilitazione notifiche utenti [1/0] abilitato/non abilitato
@@ -48,6 +49,7 @@ typedef struct {
   bool stateSendPhoto;      // stato richiesta di foto
   bool stateFeedCat;        // stato richiesta feedcat
   bool stateFlash;          // stato flash
+  int feedCount;            // quantità di cibo
   int eprom_good;           // eeprom non corrotta
 
 } MyStruct;
@@ -64,8 +66,12 @@ Servo myservo;  // create servo object to control a servo
 //Checks for new messages every 1 second.
 int botRequestDelay = 1000;
 unsigned long lastTimeBotRan;
-bool savetoEEPROM = false; 
 
+//Checks for new messages every 60 second.
+int NotRequestDelay = IR_DELAY*1000;
+unsigned long lastTimeNot;
+
+bool savetoEEPROM = false; 
 
 //CAMERA_MODEL_AI_THINKER
 #define PWDN_GPIO_NUM     32
@@ -134,11 +140,12 @@ void do_eprom_read() {
     myStruct = {
                 String(""),
                 {String(CHAT_ID_1), String(CHAT_ID_2), String(""), String("")},
-                {1, 1, 1, 1},
+                {1, 1, 0, 0},
                 false, //stateIRpin
                 false, //stateSendPhoto
                 false, //stateFeedCat
                 LOW,  // stato flash
+                2,    // tempo di feed
                 11  // stato EEPROM
                 };
     do_eprom_write();
@@ -244,7 +251,7 @@ void ServoFeed_tsk1S(void){
       Serial.println("1");
     #endif
   }
-    if (CountFeed > FEED_COUNT){
+    if (CountFeed > myStruct.feedCount){
       myservo.write(SERVO_MOVE_OFF);
       myStruct.stateFeedCat = 0;
       CountFeed = 0;
@@ -264,8 +271,7 @@ void IR_PwrOn(void){
   myStruct.stateIRpin = digitalRead(IR_PIN);
 }
 
-int IR_Tsk(void)
-{
+int IR_Tsk(void){
   static unsigned long lastDebounceTime;
   static int pinState_kp;
   static int pinState;
@@ -287,7 +293,18 @@ int IR_Tsk(void)
       // Se lo stato del pulsante è 1 (passaggio da 0 a 1), stampa sul monitor seriale
       if (pinState == HIGH) {
         Serial.println("Il pulsante è stato premuto");
-        myStruct.stateIRpin = true;
+        // TODO: QUI ANDREBBE MESSO IL CECK SULLE NOTIFICHE
+          int SenderNum = sizeof(myStruct.NotificationId)/ sizeof(bool);
+          int maxNum = 0; 
+          for (int i = 0; i<SenderNum; i++){
+              if (myStruct.NotificationId[i]){
+                  maxNum = 1;
+                  break;
+                  }
+          }
+          if (maxNum){
+            myStruct.stateIRpin = true;
+          }
       }
     }
   }
@@ -295,7 +312,6 @@ int IR_Tsk(void)
   pinState_kp = reading;
   return pinState;
 }
-
 
 void handleNewMessages(int numNewMessages) {
   Serial.print("Handle New Messages: ");
@@ -315,10 +331,10 @@ void handleNewMessages(int numNewMessages) {
         break;
       }
     }
-      if (!checkIdAuth){
-        bot.sendMessage(chat_id, "Unauthorized user", "");
-        continue;
-      }
+    if (!checkIdAuth){
+      bot.sendMessage(chat_id, "Unauthorized user", "");
+      continue;
+    }
 
     // Print the received message
     String text = bot.messages[i].text;
@@ -330,8 +346,75 @@ void handleNewMessages(int numNewMessages) {
       myStruct.stateFeedCat = true;
       bot.sendMessage(chat_id, "I will feed the cat.\n", "Markdown");
     }
-    if (text == "/shutup") { // TODO: va spostata la scrittura da eeprom da qui (con una variabile d'appoggio che mi informa che devo salvare su eeprom)
+    if (text == "/flash") {
+      myStruct.stateFlash = !myStruct.stateFlash;
+      digitalWrite(FLASH_LED_PIN, myStruct.stateFlash);
+      Serial.println("Change flash LED state");
+    }
+    if (text == "/photo") {
+      myStruct.stateSendPhoto = true;
+      myStruct.CurrentPhotoReqId = chat_id;
+      Serial.println("New photo request");
+    }
+    if (text == "/start" || text == "/back"){
+      String welcome = "Welcome to the ESP32-CAM Telegram bot.\n";
+      welcome += "/photo : takes a new photo\n";
+      welcome += "/flash : toggle flash LED\n";
+      welcome += "/feed : feed the cat\n";
+      welcome += "/settings : possibily to modify basic setting\n";
+      welcome += "You'll receive a photo whenever motion is detected.\n";
+      bot.sendMessage(chat_id, welcome, "Markdown");
+    }
+    if (text == "/settings"){ // TODO: IMPLEMENTARE LE FUNZIONALITA
+      String welcome = "In this menu, you can change information about the dispenser.\n";
+      welcome = "/notification, here you can change notification settings.\n";
+      welcome += "/setfeed : Change food quantity\n";
+      welcome += "/back : back to start menu\n";
+      bot.sendMessage(chat_id, welcome, "Markdown");
+    }
+    if (text == "/setfeed"){ // Funzionalità legate alle feeder
+      String welcome = "/setfeed, here you can increase or decrease food quantity.\n";
+      welcome += "/increase : Increase food quantity\n";
+      welcome += "/decrease : Decrease food quantity\n";
+      welcome += "/back : back to start menu\n";
+      bot.sendMessage(chat_id, welcome, "Markdown");
+    }
+    if (text == "/increase"){ 
+      if (myStruct.feedCount < FEED_MAX_COUNT) { 
+        // vado a modificare il valore 
+        myStruct.feedCount ++;
 
+        Serial.print("feedCount: ");
+        Serial.println(myStruct.feedCount);
+        // vado a salvare il valore in eeprom
+        savetoEEPROM = true; 
+      }
+      else{
+        Serial.println("you reach the maximum value");
+      }
+
+    }
+    if (text == "/decrease"){ 
+      if (myStruct.feedCount > 1) { 
+        // vado a modificare il valore 
+        myStruct.feedCount --;
+        Serial.print("feedCount: ");
+        Serial.println(myStruct.feedCount);
+        // vado a salvare il valore in eeprom
+        savetoEEPROM = true; 
+      }else{
+        Serial.println("you reach the minimum value");
+      }
+
+    }
+    if (text == "/notification"){ // Funzionalità legate alle notifiche
+      String welcome = "/notification, here you can change notification settings.\n";
+      welcome += "/dontshutup : enable motion sensor notification\n";
+      welcome += "/shutup : disalbe motion sensor notification\n";
+      welcome += "/back : back to start menu\n";
+      bot.sendMessage(chat_id, welcome, "Markdown");
+    }
+    if (text == "/shutup") { 
       // controllo se il valore precedente è differente da quello che ho chiesto
       if (myStruct.NotificationId[j] == true) { 
         // vado a modificare il valore 
@@ -350,7 +433,7 @@ void handleNewMessages(int numNewMessages) {
       }
       bot.sendMessage(chat_id, "OK, I will disable notifications.\n", "Markdown");
     }    
-    if (text == "/dontshutup") { // TODO: va spostata la scrittura da eeprom da qui (con una variabile d'appoggio che mi informa che devo salvare su eeprom)
+    if (text == "/dontshutup") {
       // controllo se il valore precedente è differente da quello che ho chiesto
       if (myStruct.NotificationId[j] == false) { 
         // vado a modificare il valore 
@@ -370,36 +453,8 @@ void handleNewMessages(int numNewMessages) {
 
       bot.sendMessage(chat_id, "OK, I will re-activate notifications.\n", "Markdown");
     }
-    if (text == "/flash") {
-      myStruct.stateFlash = !myStruct.stateFlash;
-      digitalWrite(FLASH_LED_PIN, myStruct.stateFlash);
-      Serial.println("Change flash LED state");
-    }
-    if (text == "/photo") {
-      myStruct.stateSendPhoto = true;
-      myStruct.CurrentPhotoReqId = chat_id;
-      Serial.println("New photo request");
-    }
-    if (text == "/start" || text == "/back"){
-      String welcome = "Welcome to the ESP32-CAM Telegram bot.\n";
-      welcome += "/photo : takes a new photo\n";
-      welcome += "/flash : toggle flash LED\n";
-      welcome += "/feed : feed the cat\n";
-      welcome += "/shutup : disalbe motion sensor notification\n";
-      welcome += "/dontshutup : enable motion sensor notification\n";
-      welcome += "/settings : possibily to modify basic setting\n";
-      welcome += "You'll receive a photo whenever motion is detected.\n";
-      bot.sendMessage(chat_id, welcome, "Markdown");
-    }
-    if (text == "/settings"){ // TODO: IMPLEMENTARE LE FUNZIONALITA
-      String welcome = "In this menu, you can change information about the dispenser.\n";
-      welcome += "/setphoto : Change poto quality\n";
-      welcome += "/setfeed : Change food quantity\n";
-      welcome += "/back : back to start menu\n";
-      bot.sendMessage(chat_id, welcome, "Markdown");
-    }
 
-  }
+    }
 }
 
 String sendPhotoTelegram() {
@@ -421,7 +476,8 @@ String sendPhotoTelegram() {
 
   if (clientTCP.connect(myDomain, 443)) {
     Serial.println("Connection successful");
-    
+    Serial.println("Sending Photo to: " + myStruct.CurrentPhotoReqId);
+
     String head = "--EOF\r\nContent-Disposition: form-data; name=\"chat_id\"; \r\n\r\n" + myStruct.CurrentPhotoReqId + "\r\n--EOF\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"esp32-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
     String tail = "\r\n--EOF--\r\n";
 
@@ -483,6 +539,112 @@ String sendPhotoTelegram() {
   return getBody;
 }
 
+String sendPhotoTelegramAll() {
+  int SenderNum = sizeof(myStruct.NotificationId)/ sizeof(bool);
+  
+  int maxNum = 0; 
+
+  for (int i = 0; i<SenderNum; i++){
+      if (myStruct.NotificationId[i]){
+          maxNum = 1;
+          break;
+          }
+  }
+
+  if (!maxNum){
+    Serial.println("No candidate for photo");
+    return  "No candidate for photo";
+  }
+
+  const char* myDomain = "api.telegram.org";
+  String getAll = "";
+  String getBody = "";
+
+  camera_fb_t * fb = NULL;
+  fb = esp_camera_fb_get();  
+  if(!fb) {
+    Serial.println("Camera capture failed");
+    delay(1000);
+    ESP.restart();
+    return "Camera capture failed";
+  }  
+  
+  Serial.println("Connect to " + String(myDomain));
+  for (int i = 0; i<SenderNum; i++){
+      
+      // printf("%d\n", myStruct.Notification[i]);
+      if (myStruct.NotificationId[i]){
+          Serial.println("Sending Photo to: " + myStruct.AuthId[i]);
+
+        if (clientTCP.connect(myDomain, 443)) { // FUNZIONE CHE INVIA LA FOTO AL ID i-esimo
+          Serial.println("Connection successful");
+          
+          String head = "--EOF\r\nContent-Disposition: form-data; name=\"chat_id\"; \r\n\r\n" + myStruct.AuthId[i] + "\r\n--EOF\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"esp32-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
+          String tail = "\r\n--EOF--\r\n";
+
+          uint16_t imageLen = fb->len;
+          uint16_t extraLen = head.length() + tail.length();
+          uint16_t totalLen = imageLen + extraLen;
+        
+          clientTCP.println("POST /bot"+BOTtoken+"/sendPhoto HTTP/1.1");
+          clientTCP.println("Host: " + String(myDomain));
+          clientTCP.println("Content-Length: " + String(totalLen));
+          clientTCP.println("Content-Type: multipart/form-data; boundary=EOF");
+          clientTCP.println();
+          clientTCP.print(head);
+        
+          uint8_t *fbBuf = fb->buf;
+          size_t fbLen = fb->len;
+          for (size_t n=0;n<fbLen;n=n+1024) {
+            if (n+1024<fbLen) {
+              clientTCP.write(fbBuf, 1024);
+              fbBuf += 1024;
+            }
+            else if (fbLen%1024>0) {
+              size_t remainder = fbLen%1024;
+              clientTCP.write(fbBuf, remainder);
+            }
+          }  
+          
+          clientTCP.print(tail);
+          
+
+          
+          int waitTime = 10000;   // timeout 10 seconds
+          long startTimer = millis();
+          boolean state = false;
+          
+          while ((startTimer + waitTime) > millis()){
+            Serial.print(".");
+            delay(100);      
+            while (clientTCP.available()) {
+              char c = clientTCP.read();
+              if (state==true) getBody += String(c);        
+              if (c == '\n') {
+                if (getAll.length()==0) state=true; 
+                getAll = "";
+              } 
+              else if (c != '\r')
+                getAll += String(c);
+              startTimer = millis();
+            }
+            if (getBody.length()>0) break;
+          }
+          clientTCP.stop();
+          Serial.println(getBody);
+          }  else {
+          getBody="Connected to api.telegram.org failed.";
+          Serial.println("Connected to api.telegram.org failed.");
+        }
+      }
+      
+  }
+  esp_camera_fb_return(fb);
+
+  return getBody;
+}
+
+
 void Led_PwrOn(void){
   pinMode(FLASH_LED_PIN, OUTPUT);
   digitalWrite(FLASH_LED_PIN, myStruct.stateFlash);
@@ -515,9 +677,9 @@ void setup(){
   Scheduler_PwrOn();
 }
 
-void task1(void* pvParameters) {// 1 secondo
+void task1(void* pvParameters) {// 60 secondo
   TickType_t lastWakeTime = xTaskGetTickCount();
-  const TickType_t period = pdMS_TO_TICKS(1000);  
+  const TickType_t period = pdMS_TO_TICKS(60000);  
 
   while (true) {
     // Esegui il codice del task 1
@@ -565,10 +727,21 @@ void task3(void* pvParameters) {// 200 millisecondi
 
 void loop() {
 
+  if (millis() > lastTimeNot + NotRequestDelay & myStruct.stateIRpin)  {
+    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    // TODO: va pensato ad un modo per non chiamare due funzioni contemporaneamente
+    Serial.println("Preparing photo");
+    sendPhotoTelegramAll(); 
+    myStruct.stateIRpin = false; 
+    lastTimeNot = millis();
+  }
+
+
     if (myStruct.stateSendPhoto) {
       Serial.println("Preparing photo");
       sendPhotoTelegram(); 
       myStruct.stateSendPhoto = false; 
+      myStruct.CurrentPhotoReqId = "";
     }
 
   if (millis() > lastTimeBotRan + botRequestDelay)  {
@@ -581,8 +754,6 @@ void loop() {
     lastTimeBotRan = millis();
   }
 }
-
-
 
 
 
