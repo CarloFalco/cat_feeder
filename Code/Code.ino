@@ -10,6 +10,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <ESP32Servo.h>
+
+#include <EEPROM.h>
 // Use @myidbot to find out the chat ID of an individual or a group
 // Also note that you need to click "start" on a bot before it can
 // message you
@@ -29,7 +31,7 @@
 // DEFINE FOR DEBUG
 #define DEBUG_WIFI
 #define DEBUG_FEEDER
-
+#define DEBUG_NOTIFICATION
 
 
 TaskHandle_t task1Handle;
@@ -45,17 +47,11 @@ typedef struct {
   bool stateSendPhoto;      // stato richiesta di foto
   bool stateFeedCat;        // stato richiesta feedcat
   bool stateFlash;          // stato flash
+  int eprom_good;           // eeprom non corrotta
+
 } MyStruct;
 
-MyStruct myStruct = {
-                       String(""),
-                       {String(CHAT_ID_1), String(CHAT_ID_2), String(""), String("")},
-                       {1, 1, 1, 1},
-                       false, //stateIRpin
-                       false, //stateSendPhoto
-                       false, //stateFeedCat
-                       LOW  // stato flash
-                       };
+MyStruct myStruct;
 
 
 
@@ -108,6 +104,58 @@ void initWiFi_PwrOn(const char* ssid, const char* password) {
   #endif
 
 }
+
+void do_eprom_read() {
+
+  EEPROM.begin(200);
+  EEPROM.get(0, myStruct);
+
+if (myStruct.eprom_good == 11){
+  Serial.println("Good settings in the EPROM ");
+
+  Serial.print("Notification: ");
+  for(int i = 0; i < 4; i++) {
+    Serial.print("\t");
+    Serial.print(myStruct.NotificationId[i]);
+  }
+  Serial.println(".");
+
+  Serial.println(myStruct.CurrentPhotoReqId);
+  Serial.println(myStruct.stateIRpin);
+  Serial.println(myStruct.stateSendPhoto);
+  Serial.println(myStruct.stateFeedCat);
+  Serial.println(myStruct.stateFlash);
+
+
+} else{
+  Serial.println("EPROM canot be read ");
+  myStruct = {
+              String(""),
+              {String(CHAT_ID_1), String(CHAT_ID_2), String(""), String("")},
+              {1, 1, 1, 1},
+              false, //stateIRpin
+              false, //stateSendPhoto
+              false, //stateFeedCat
+              LOW,  // stato flash
+              11  // stato EEPROM
+              };
+  do_eprom_write();
+  }
+}
+
+
+void do_eprom_write() {
+  Serial.println("Writing to EPROM ...");
+  EEPROM.begin(200);
+  EEPROM.put(0, myStruct);
+  EEPROM.commit();
+  EEPROM.end();
+
+  do_eprom_read();
+}
+
+
+
 
 void configInitCamera(){
   camera_config_t config;
@@ -173,7 +221,6 @@ void configInitCamera(){
 
 }
 
-
 // FUNZIONI RELATIVE AL SERVO MOTORE
 void ServoFeed_PwrOn(void){
   ESP32PWM::allocateTimer(0);
@@ -212,8 +259,6 @@ void ServoFeed_tsk1S(void){
   
 }
 
-
-
 // FUNZIONI RELATIVE AL SENSORE IR
 void IR_PwrOn(void){
   // definizione tipologia pin
@@ -237,8 +282,6 @@ void IR_Tsk(void) {
   }
   pinState_kp = pinState; // store old state
 }
-
-
 
 void handleNewMessages(int numNewMessages) {
   Serial.print("Handle New Messages: ");
@@ -273,6 +316,47 @@ void handleNewMessages(int numNewMessages) {
       myStruct.stateFeedCat = true;
       bot.sendMessage(chat_id, "I will feed the cat.\n", "Markdown");
     }
+    if (text == "/shutup") {
+      // controllo se il valore precedente è differente da quello che ho chiesto
+      if (myStruct.NotificationId[j] == true) { 
+        // vado a modificare il valore 
+        myStruct.NotificationId[j] = false;
+        // vado a salvare il valore in eeprom
+        do_eprom_write(); 
+
+      #ifdef DEBUG_NOTIFICATION
+        Serial.print("Notification: ");
+        for(int i = 0; i < 4; i++) {
+          Serial.print("\t");
+          Serial.print(myStruct.NotificationId[i]);
+        }
+        Serial.println(".");
+      #endif
+      }
+      bot.sendMessage(chat_id, "OK, I will disable notifications.\n", "Markdown");
+    }    
+
+    if (text == "/dontshutup") {
+      // controllo se il valore precedente è differente da quello che ho chiesto
+      if (myStruct.NotificationId[j] == false) { 
+        // vado a modificare il valore 
+        myStruct.NotificationId[j] = true;
+        // vado a salvare il valore in eeprom
+        do_eprom_write(); 
+
+      #ifdef DEBUG_NOTIFICATION
+        Serial.print("Notification: ");
+        for(int i = 0; i < 4; i++) {
+          Serial.print("\t");
+          Serial.print(myStruct.NotificationId[i]);
+        }
+        Serial.println(".");
+      #endif
+      }
+
+      bot.sendMessage(chat_id, "OK, I will re-activate notifications.\n", "Markdown");
+    }
+
 
     if (text == "/flash") {
       myStruct.stateFlash = !myStruct.stateFlash;
@@ -388,6 +472,9 @@ void setup(){
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); 
   // Init Serial Monitor
   Serial.begin(115200);
+  
+  // Inizializzo la mia struttura
+  do_eprom_read();
 
   // Set LED Flash as output
   Led_PwrOn();
@@ -468,6 +555,8 @@ void loop() {
     lastTimeBotRan = millis();
   }
 }
+
+
 
 
 
