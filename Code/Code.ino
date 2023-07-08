@@ -26,7 +26,7 @@
 #define SERVO_MOVE_ON 95
 #define SERVO_MOVE_OFF 90
 // SENSORE IR
-#define IR_PIN 34
+#define IR_PIN 14
 
 // DEFINE FOR DEBUG
 #define DEBUG_WIFI
@@ -43,6 +43,7 @@ typedef struct {
   String CurrentPhotoReqId;      // ID del utente che ha richiesto la foto
   String AuthId[4];         // ID degli utenti
   bool NotificationId[4];   // Flag di abilitazione notifiche utenti [1/0] abilitato/non abilitato
+
   bool stateIRpin;          // stato del sensore infrarossi
   bool stateSendPhoto;      // stato richiesta di foto
   bool stateFeedCat;        // stato richiesta feedcat
@@ -52,8 +53,6 @@ typedef struct {
 } MyStruct;
 
 MyStruct myStruct;
-
-
 
 WiFiClientSecure clientTCP;
 
@@ -65,6 +64,8 @@ Servo myservo;  // create servo object to control a servo
 //Checks for new messages every 1 second.
 int botRequestDelay = 1000;
 unsigned long lastTimeBotRan;
+bool savetoEEPROM = false; 
+
 
 //CAMERA_MODEL_AI_THINKER
 #define PWDN_GPIO_NUM     32
@@ -105,13 +106,14 @@ void initWiFi_PwrOn(const char* ssid, const char* password) {
 
 }
 
+// FUNZIONI RELATIVE ALLA EEPROM
 void do_eprom_read() {
 
   EEPROM.begin(200);
   EEPROM.get(0, myStruct);
 
-if (myStruct.eprom_good == 11){
-  Serial.println("Good settings in the EPROM ");
+  if (myStruct.eprom_good == 11){
+    Serial.println("Good settings in the EPROM ");
 
   Serial.print("Notification: ");
   for(int i = 0; i < 4; i++) {
@@ -127,22 +129,21 @@ if (myStruct.eprom_good == 11){
   Serial.println(myStruct.stateFlash);
 
 
-} else{
-  Serial.println("EPROM canot be read ");
-  myStruct = {
-              String(""),
-              {String(CHAT_ID_1), String(CHAT_ID_2), String(""), String("")},
-              {1, 1, 1, 1},
-              false, //stateIRpin
-              false, //stateSendPhoto
-              false, //stateFeedCat
-              LOW,  // stato flash
-              11  // stato EEPROM
-              };
-  do_eprom_write();
+  } else{
+    Serial.println("EPROM canot be read ");
+    myStruct = {
+                String(""),
+                {String(CHAT_ID_1), String(CHAT_ID_2), String(""), String("")},
+                {1, 1, 1, 1},
+                false, //stateIRpin
+                false, //stateSendPhoto
+                false, //stateFeedCat
+                LOW,  // stato flash
+                11  // stato EEPROM
+                };
+    do_eprom_write();
   }
 }
-
 
 void do_eprom_write() {
   Serial.println("Writing to EPROM ...");
@@ -151,11 +152,7 @@ void do_eprom_write() {
   EEPROM.commit();
   EEPROM.end();
 
-  do_eprom_read();
 }
-
-
-
 
 void configInitCamera(){
   camera_config_t config;
@@ -262,26 +259,43 @@ void ServoFeed_tsk1S(void){
 // FUNZIONI RELATIVE AL SENSORE IR
 void IR_PwrOn(void){
   // definizione tipologia pin
-  pinMode(IR_PIN, INPUT);
+  pinMode(IR_PIN, INPUT_PULLUP);
   // condizione iniziale IR
   myStruct.stateIRpin = digitalRead(IR_PIN);
 }
 
-void IR_Tsk(void) {
-  static bool pinState_kp; 
-  static bool pinState; 
-  pinState = digitalRead(IR_PIN);   // read new state
+int IR_Tsk(void)
+{
+  static unsigned long lastDebounceTime;
+  static int pinState_kp;
+  static int pinState;
+  // Leggi lo stato del pin
+  int reading = digitalRead(IR_PIN);
 
-  if (pinState_kp == LOW && pinState == HIGH) {   // pin state change: LOW -> HIGH
-    Serial.println("Motion detected!");
-    myStruct.stateIRpin = true; // Comunico che ho visto un movimento (poi posso mandare la foto)
+  // Verifica se il pin è diverso dall'ultimo stato registrato
+  if (reading != pinState_kp) {
+    // Aggiorna il tempo di debounce
+    lastDebounceTime = millis();
   }
-  else
-  if (pinState_kp == HIGH && pinState == LOW) {   // pin state change: HIGH -> LOW
-    Serial.println("Motion stopped!");
+
+  // Verifica se è trascorso il tempo di debounce
+  if ((millis() - lastDebounceTime) > 50) {
+    // Se il valore del pin è stabile, aggiorna lo stato corrente
+    if (reading != pinState) {
+      pinState = reading;
+
+      // Se lo stato del pulsante è 1 (passaggio da 0 a 1), stampa sul monitor seriale
+      if (pinState == HIGH) {
+        Serial.println("Il pulsante è stato premuto");
+        myStruct.stateIRpin = true;
+      }
+    }
   }
-  pinState_kp = pinState; // store old state
+  // Salva lo stato attuale del pulsante per il prossimo ciclo
+  pinState_kp = reading;
+  return pinState;
 }
+
 
 void handleNewMessages(int numNewMessages) {
   Serial.print("Handle New Messages: ");
@@ -316,13 +330,14 @@ void handleNewMessages(int numNewMessages) {
       myStruct.stateFeedCat = true;
       bot.sendMessage(chat_id, "I will feed the cat.\n", "Markdown");
     }
-    if (text == "/shutup") {
+    if (text == "/shutup") { // TODO: va spostata la scrittura da eeprom da qui (con una variabile d'appoggio che mi informa che devo salvare su eeprom)
+
       // controllo se il valore precedente è differente da quello che ho chiesto
       if (myStruct.NotificationId[j] == true) { 
         // vado a modificare il valore 
         myStruct.NotificationId[j] = false;
         // vado a salvare il valore in eeprom
-        do_eprom_write(); 
+        savetoEEPROM = true; 
 
       #ifdef DEBUG_NOTIFICATION
         Serial.print("Notification: ");
@@ -335,14 +350,13 @@ void handleNewMessages(int numNewMessages) {
       }
       bot.sendMessage(chat_id, "OK, I will disable notifications.\n", "Markdown");
     }    
-
-    if (text == "/dontshutup") {
+    if (text == "/dontshutup") { // TODO: va spostata la scrittura da eeprom da qui (con una variabile d'appoggio che mi informa che devo salvare su eeprom)
       // controllo se il valore precedente è differente da quello che ho chiesto
       if (myStruct.NotificationId[j] == false) { 
         // vado a modificare il valore 
         myStruct.NotificationId[j] = true;
         // vado a salvare il valore in eeprom
-        do_eprom_write(); 
+        savetoEEPROM = true; 
 
       #ifdef DEBUG_NOTIFICATION
         Serial.print("Notification: ");
@@ -356,8 +370,6 @@ void handleNewMessages(int numNewMessages) {
 
       bot.sendMessage(chat_id, "OK, I will re-activate notifications.\n", "Markdown");
     }
-
-
     if (text == "/flash") {
       myStruct.stateFlash = !myStruct.stateFlash;
       digitalWrite(FLASH_LED_PIN, myStruct.stateFlash);
@@ -368,14 +380,22 @@ void handleNewMessages(int numNewMessages) {
       myStruct.CurrentPhotoReqId = chat_id;
       Serial.println("New photo request");
     }
-    if (text == "/start"){
+    if (text == "/start" || text == "/back"){
       String welcome = "Welcome to the ESP32-CAM Telegram bot.\n";
       welcome += "/photo : takes a new photo\n";
       welcome += "/flash : toggle flash LED\n";
       welcome += "/feed : feed the cat\n";
       welcome += "/shutup : disalbe motion sensor notification\n";
       welcome += "/dontshutup : enable motion sensor notification\n";
+      welcome += "/settings : possibily to modify basic setting\n";
       welcome += "You'll receive a photo whenever motion is detected.\n";
+      bot.sendMessage(chat_id, welcome, "Markdown");
+    }
+    if (text == "/settings"){ // TODO: IMPLEMENTARE LE FUNZIONALITA
+      String welcome = "In this menu, you can change information about the dispenser.\n";
+      welcome += "/setphoto : Change poto quality\n";
+      welcome += "/setfeed : Change food quantity\n";
+      welcome += "/back : back to start menu\n";
       bot.sendMessage(chat_id, welcome, "Markdown");
     }
 
@@ -487,6 +507,9 @@ void setup(){
 
   // Configure Servo Motor
   ServoFeed_PwrOn();
+  
+  // Configure IR sensor
+  IR_PwrOn();
 
   // Crea i task
   Scheduler_PwrOn();
@@ -499,7 +522,10 @@ void task1(void* pvParameters) {// 1 secondo
   while (true) {
     // Esegui il codice del task 1
     //Serial.println("Task 1");
-
+    if (savetoEEPROM){
+      savetoEEPROM = false;
+      do_eprom_write(); 
+    }
 
     vTaskDelayUntil(&lastWakeTime, period);
   }
@@ -530,7 +556,7 @@ void task3(void* pvParameters) {// 200 millisecondi
   while (true) {
     // Esegui il codice del task 3
     //Serial.println("Task 3");
-
+    int state = IR_Tsk();
     vTaskDelayUntil(&lastWakeTime, period);
   }
 }
