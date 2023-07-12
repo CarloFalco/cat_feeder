@@ -21,6 +21,7 @@
 // FLASH
 #define FLASH_LED_PIN 4
 // SERVOMOTORE
+#define MOS_SERVO_PIN 2
 #define FEED_MAX_COUNT 6
 #define SERVO_PIN 13
 #define SERVO_MOVE_ON 95
@@ -64,7 +65,7 @@ UniversalTelegramBot bot(BOTtoken, clientTCP);
 Servo myservo;  // create servo object to control a servo
 
 //Checks for new messages every 1 second.
-int botRequestDelay = 1000;
+int botRequestDelay = 500;
 unsigned long lastTimeBotRan;
 
 //Checks for new messages every 60 second.
@@ -145,7 +146,7 @@ void do_eprom_read() {
                 false, //stateSendPhoto
                 false, //stateFeedCat
                 LOW,  // stato flash
-                2,    // tempo di feed
+                5,    // tempo di feed
                 11  // stato EEPROM
                 };
     do_eprom_write();
@@ -235,15 +236,23 @@ void ServoFeed_PwrOn(void){
   myservo.attach(SERVO_PIN, 1000, 2000); // attaches the servo on pin 18 to the servo object
 
   myservo.write(SERVO_MOVE_OFF);
+
+  pinMode(MOS_SERVO_PIN, OUTPUT);
+  digitalWrite(MOS_SERVO_PIN, LOW);
+
+
 }
 
 void ServoFeed_tsk1S(void){
   static int CountFeed;
 
   Serial.print(CountFeed);
-  Serial.print("<- Valore in ingresso");
+  Serial.println("<- Valore in ingresso;");
 
   if (myStruct.stateFeedCat == 1) {
+    if (CountFeed == 1){
+      digitalWrite(MOS_SERVO_PIN, HIGH);
+    }
     myservo.write(SERVO_MOVE_ON);
     CountFeed = CountFeed + 1;
     #ifdef DEBUG_FEEDER
@@ -251,15 +260,18 @@ void ServoFeed_tsk1S(void){
       Serial.println("1");
     #endif
   }
-    if (CountFeed > myStruct.feedCount){
-      myservo.write(SERVO_MOVE_OFF);
-      myStruct.stateFeedCat = 0;
-      CountFeed = 0;
-      #ifdef DEBUG_FEEDER
-          Serial.print("Debug State = ");
-          Serial.println("2");
-      #endif
-    }
+
+  if (CountFeed > myStruct.feedCount){
+    myservo.write(SERVO_MOVE_OFF);
+
+    digitalWrite(MOS_SERVO_PIN, LOW);
+    myStruct.stateFeedCat = 0;
+    CountFeed = 0;
+    #ifdef DEBUG_FEEDER
+        Serial.print("Debug State = ");
+        Serial.println("2");
+    #endif
+  }
   
 }
 
@@ -648,13 +660,17 @@ String sendPhotoTelegramAll() {
 void Led_PwrOn(void){
   pinMode(FLASH_LED_PIN, OUTPUT);
   digitalWrite(FLASH_LED_PIN, myStruct.stateFlash);
+
 }
 
 void setup(){
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); 
   // Init Serial Monitor
   Serial.begin(115200);
-  
+
+  // Configure Servo Motor
+  ServoFeed_PwrOn();
+
   // Inizializzo la mia struttura
   do_eprom_read();
 
@@ -667,8 +683,8 @@ void setup(){
   // Connect to Wi-Fi
   initWiFi_PwrOn(NETWORK_SSID, PASSWORD);
 
-  // Configure Servo Motor
-  ServoFeed_PwrOn();
+  
+  
   
   // Configure IR sensor
   IR_PwrOn();
@@ -704,6 +720,7 @@ void task2(void* pvParameters) {// 500 millisecondi
     //Serial.println("Task 2");
     if (myStruct.stateFeedCat)
     {
+      
       ServoFeed_tsk1S();
     }
 

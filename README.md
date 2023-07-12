@@ -20,3 +20,17 @@
 1. [DS3230-180](https://it.aliexpress.com/item/1943129663.html?spm=a2g0o.order_list.order_list_main.51.75fe3696Li6PJf&gatewayAdapt=glo2ita)
 1. [ESP32-CAM-MB](https://it.aliexpress.com/item/1005003334474586.html?pdp_npi=2%40dis%21EUR%21%E2%82%AC%201%2C14%21%E2%82%AC%200%2C90%21%21%21%21%21%402100bb5116712687796615069e42dc%2112000025271323938%21sh01&spm=a2g0o.store_pc_home.productList_2003291409014.pic_6)
 1. [OV2640-160/650nm](https://it.aliexpress.com/item/1005004518669324.html?spm=a2g0o.order_list.order_list_main.61.75fe3696Li6PJf&gatewayAdapt=glo2ita)
+
+## Printing component:
+
+|  		|  		| 	|	|	||
+| ------|------ | ------| ------|------ |------ |
+| 1 | Hopper			| 76g 	| |7h 	|
+| 2 | PortionWheel 		| 41g	| |4h 	|
+| 3 | WheelCompartment 	| 59g	| |5h 	|
+| 4 | electronic 		| 151g	| |16h 	|
+| 5 | Bowl 				| 146g	| |15h 	|
+| 6 | Shel 				| 214g	| |20h 	|
+| 7 | Lid 				| 61g	| |5h 	|
+|   |   				| 		| |		|
+|  		|  		|  748g	| |72h	|
