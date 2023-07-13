@@ -162,6 +162,7 @@ void do_eprom_write() {
 
 }
 
+// FUNZIONI RELATIVE ALLA FOTOCAMERA
 void configInitCamera(){
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -226,6 +227,197 @@ void configInitCamera(){
 
 }
 
+String sendPhotoTelegram() {
+  const char* myDomain = "api.telegram.org";
+  String getAll = "";
+  String getBody = "";
+
+  camera_fb_t * fb = NULL;
+  fb = esp_camera_fb_get();  
+  if(!fb) {
+    Serial.println("Camera capture failed");
+    delay(1000);
+    ESP.restart();
+    return "Camera capture failed";
+  }  
+  
+  Serial.println("Connect to " + String(myDomain));
+
+
+  if (clientTCP.connect(myDomain, 443)) {
+    Serial.println("Connection successful");
+    Serial.println("Sending Photo to: " + myStruct.CurrentPhotoReqId);
+
+    String head = "--EOF\r\nContent-Disposition: form-data; name=\"chat_id\"; \r\n\r\n" + myStruct.CurrentPhotoReqId + "\r\n--EOF\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"esp32-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
+    String tail = "\r\n--EOF--\r\n";
+
+    uint16_t imageLen = fb->len;
+    uint16_t extraLen = head.length() + tail.length();
+    uint16_t totalLen = imageLen + extraLen;
+  
+    clientTCP.println("POST /bot"+BOTtoken+"/sendPhoto HTTP/1.1");
+    clientTCP.println("Host: " + String(myDomain));
+    clientTCP.println("Content-Length: " + String(totalLen));
+    clientTCP.println("Content-Type: multipart/form-data; boundary=EOF");
+    clientTCP.println();
+    clientTCP.print(head);
+  
+    uint8_t *fbBuf = fb->buf;
+    size_t fbLen = fb->len;
+    for (size_t n=0;n<fbLen;n=n+1024) {
+      if (n+1024<fbLen) {
+        clientTCP.write(fbBuf, 1024);
+        fbBuf += 1024;
+      }
+      else if (fbLen%1024>0) {
+        size_t remainder = fbLen%1024;
+        clientTCP.write(fbBuf, remainder);
+      }
+    }  
+    
+    clientTCP.print(tail);
+    
+    esp_camera_fb_return(fb);
+    
+    int waitTime = 10000;   // timeout 10 seconds
+    long startTimer = millis();
+    boolean state = false;
+    
+    while ((startTimer + waitTime) > millis()){
+      Serial.print(".");
+      delay(100);      
+      while (clientTCP.available()) {
+        char c = clientTCP.read();
+        if (state==true) getBody += String(c);        
+        if (c == '\n') {
+          if (getAll.length()==0) state=true; 
+          getAll = "";
+        } 
+        else if (c != '\r')
+          getAll += String(c);
+        startTimer = millis();
+      }
+      if (getBody.length()>0) break;
+    }
+    clientTCP.stop();
+    Serial.println(getBody);
+  }
+  else {
+    getBody="Connected to api.telegram.org failed.";
+    Serial.println("Connected to api.telegram.org failed.");
+  }
+  return getBody;
+}
+
+String sendPhotoTelegramAll() {
+  int SenderNum = sizeof(myStruct.NotificationId)/ sizeof(bool);
+  
+  int maxNum = 0; 
+
+  for (int i = 0; i<SenderNum; i++){
+      if (myStruct.NotificationId[i]){
+          maxNum = 1;
+          break;
+          }
+  }
+
+  if (!maxNum){
+    Serial.println("No candidate for photo");
+    return  "No candidate for photo";
+  }
+
+  const char* myDomain = "api.telegram.org";
+  String getAll = "";
+  String getBody = "";
+
+  camera_fb_t * fb = NULL;
+  fb = esp_camera_fb_get();  
+  if(!fb) {
+    Serial.println("Camera capture failed");
+    delay(1000);
+    ESP.restart();
+    return "Camera capture failed";
+  }  
+  
+  Serial.println("Connect to " + String(myDomain));
+  for (int i = 0; i<SenderNum; i++){
+      
+      // printf("%d\n", myStruct.Notification[i]);
+      if (myStruct.NotificationId[i]){
+          Serial.println("Sending Photo to: " + myStruct.AuthId[i]);
+          // Sending notification to Id
+          String chat_id = myStruct.AuthId[i];
+          bot.sendMessage(chat_id, "Motion Detected", "Markdown");
+
+
+        if (clientTCP.connect(myDomain, 443)) { // FUNZIONE CHE INVIA LA FOTO AL ID i-esimo
+          Serial.println("Connection successful");
+          
+          String head = "--EOF\r\nContent-Disposition: form-data; name=\"chat_id\"; \r\n\r\n" + myStruct.AuthId[i] + "\r\n--EOF\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"esp32-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
+          String tail = "\r\n--EOF--\r\n";
+
+          uint16_t imageLen = fb->len;
+          uint16_t extraLen = head.length() + tail.length();
+          uint16_t totalLen = imageLen + extraLen;
+        
+          clientTCP.println("POST /bot"+BOTtoken+"/sendPhoto HTTP/1.1");
+          clientTCP.println("Host: " + String(myDomain));
+          clientTCP.println("Content-Length: " + String(totalLen));
+          clientTCP.println("Content-Type: multipart/form-data; boundary=EOF");
+          clientTCP.println();
+          clientTCP.print(head);
+        
+          uint8_t *fbBuf = fb->buf;
+          size_t fbLen = fb->len;
+          for (size_t n=0;n<fbLen;n=n+1024) {
+            if (n+1024<fbLen) {
+              clientTCP.write(fbBuf, 1024);
+              fbBuf += 1024;
+            }
+            else if (fbLen%1024>0) {
+              size_t remainder = fbLen%1024;
+              clientTCP.write(fbBuf, remainder);
+            }
+          }  
+          
+          clientTCP.print(tail);
+
+
+          
+          int waitTime = 10000;   // timeout 10 seconds
+          long startTimer = millis();
+          boolean state = false;
+          
+          while ((startTimer + waitTime) > millis()){
+            Serial.print(".");
+            delay(100);      
+            while (clientTCP.available()) {
+              char c = clientTCP.read();
+              if (state==true) getBody += String(c);        
+              if (c == '\n') {
+                if (getAll.length()==0) state=true; 
+                getAll = "";
+              } 
+              else if (c != '\r')
+                getAll += String(c);
+              startTimer = millis();
+            }
+            if (getBody.length()>0) break;
+          }
+          clientTCP.stop();
+          Serial.println(getBody);
+          }  else {
+          getBody="Connected to api.telegram.org failed.";
+          Serial.println("Connected to api.telegram.org failed.");
+        }
+      }
+      
+  }
+  esp_camera_fb_return(fb);
+
+  return getBody;
+}
+
 // FUNZIONI RELATIVE AL SERVO MOTORE
 void ServoFeed_PwrOn(void){
   ESP32PWM::allocateTimer(0);
@@ -245,10 +437,11 @@ void ServoFeed_PwrOn(void){
 
 void ServoFeed_tsk1S(void){
   static int CountFeed;
-
+  #ifdef DEBUG_FEEDER
   Serial.print(CountFeed);
   Serial.println("<- Valore in ingresso;");
-
+  #endif
+  
   if (myStruct.stateFeedCat == 1) {
     if (CountFeed == 1){
       digitalWrite(MOS_SERVO_PIN, HIGH);
@@ -325,6 +518,7 @@ int IR_Tsk(void){
   return pinState;
 }
 
+// FUNZIONI RELATIVE AL BOT
 void handleNewMessages(int numNewMessages) {
   Serial.print("Handle New Messages: ");
   Serial.println(numNewMessages);
@@ -469,194 +663,6 @@ void handleNewMessages(int numNewMessages) {
     }
 }
 
-String sendPhotoTelegram() {
-  const char* myDomain = "api.telegram.org";
-  String getAll = "";
-  String getBody = "";
-
-  camera_fb_t * fb = NULL;
-  fb = esp_camera_fb_get();  
-  if(!fb) {
-    Serial.println("Camera capture failed");
-    delay(1000);
-    ESP.restart();
-    return "Camera capture failed";
-  }  
-  
-  Serial.println("Connect to " + String(myDomain));
-
-
-  if (clientTCP.connect(myDomain, 443)) {
-    Serial.println("Connection successful");
-    Serial.println("Sending Photo to: " + myStruct.CurrentPhotoReqId);
-
-    String head = "--EOF\r\nContent-Disposition: form-data; name=\"chat_id\"; \r\n\r\n" + myStruct.CurrentPhotoReqId + "\r\n--EOF\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"esp32-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
-    String tail = "\r\n--EOF--\r\n";
-
-    uint16_t imageLen = fb->len;
-    uint16_t extraLen = head.length() + tail.length();
-    uint16_t totalLen = imageLen + extraLen;
-  
-    clientTCP.println("POST /bot"+BOTtoken+"/sendPhoto HTTP/1.1");
-    clientTCP.println("Host: " + String(myDomain));
-    clientTCP.println("Content-Length: " + String(totalLen));
-    clientTCP.println("Content-Type: multipart/form-data; boundary=EOF");
-    clientTCP.println();
-    clientTCP.print(head);
-  
-    uint8_t *fbBuf = fb->buf;
-    size_t fbLen = fb->len;
-    for (size_t n=0;n<fbLen;n=n+1024) {
-      if (n+1024<fbLen) {
-        clientTCP.write(fbBuf, 1024);
-        fbBuf += 1024;
-      }
-      else if (fbLen%1024>0) {
-        size_t remainder = fbLen%1024;
-        clientTCP.write(fbBuf, remainder);
-      }
-    }  
-    
-    clientTCP.print(tail);
-    
-    esp_camera_fb_return(fb);
-    
-    int waitTime = 10000;   // timeout 10 seconds
-    long startTimer = millis();
-    boolean state = false;
-    
-    while ((startTimer + waitTime) > millis()){
-      Serial.print(".");
-      delay(100);      
-      while (clientTCP.available()) {
-        char c = clientTCP.read();
-        if (state==true) getBody += String(c);        
-        if (c == '\n') {
-          if (getAll.length()==0) state=true; 
-          getAll = "";
-        } 
-        else if (c != '\r')
-          getAll += String(c);
-        startTimer = millis();
-      }
-      if (getBody.length()>0) break;
-    }
-    clientTCP.stop();
-    Serial.println(getBody);
-  }
-  else {
-    getBody="Connected to api.telegram.org failed.";
-    Serial.println("Connected to api.telegram.org failed.");
-  }
-  return getBody;
-}
-
-String sendPhotoTelegramAll() {
-  int SenderNum = sizeof(myStruct.NotificationId)/ sizeof(bool);
-  
-  int maxNum = 0; 
-
-  for (int i = 0; i<SenderNum; i++){
-      if (myStruct.NotificationId[i]){
-          maxNum = 1;
-          break;
-          }
-  }
-
-  if (!maxNum){
-    Serial.println("No candidate for photo");
-    return  "No candidate for photo";
-  }
-
-  const char* myDomain = "api.telegram.org";
-  String getAll = "";
-  String getBody = "";
-
-  camera_fb_t * fb = NULL;
-  fb = esp_camera_fb_get();  
-  if(!fb) {
-    Serial.println("Camera capture failed");
-    delay(1000);
-    ESP.restart();
-    return "Camera capture failed";
-  }  
-  
-  Serial.println("Connect to " + String(myDomain));
-  for (int i = 0; i<SenderNum; i++){
-      
-      // printf("%d\n", myStruct.Notification[i]);
-      if (myStruct.NotificationId[i]){
-          Serial.println("Sending Photo to: " + myStruct.AuthId[i]);
-
-        if (clientTCP.connect(myDomain, 443)) { // FUNZIONE CHE INVIA LA FOTO AL ID i-esimo
-          Serial.println("Connection successful");
-          
-          String head = "--EOF\r\nContent-Disposition: form-data; name=\"chat_id\"; \r\n\r\n" + myStruct.AuthId[i] + "\r\n--EOF\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"esp32-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
-          String tail = "\r\n--EOF--\r\n";
-
-          uint16_t imageLen = fb->len;
-          uint16_t extraLen = head.length() + tail.length();
-          uint16_t totalLen = imageLen + extraLen;
-        
-          clientTCP.println("POST /bot"+BOTtoken+"/sendPhoto HTTP/1.1");
-          clientTCP.println("Host: " + String(myDomain));
-          clientTCP.println("Content-Length: " + String(totalLen));
-          clientTCP.println("Content-Type: multipart/form-data; boundary=EOF");
-          clientTCP.println();
-          clientTCP.print(head);
-        
-          uint8_t *fbBuf = fb->buf;
-          size_t fbLen = fb->len;
-          for (size_t n=0;n<fbLen;n=n+1024) {
-            if (n+1024<fbLen) {
-              clientTCP.write(fbBuf, 1024);
-              fbBuf += 1024;
-            }
-            else if (fbLen%1024>0) {
-              size_t remainder = fbLen%1024;
-              clientTCP.write(fbBuf, remainder);
-            }
-          }  
-          
-          clientTCP.print(tail);
-          
-
-          
-          int waitTime = 10000;   // timeout 10 seconds
-          long startTimer = millis();
-          boolean state = false;
-          
-          while ((startTimer + waitTime) > millis()){
-            Serial.print(".");
-            delay(100);      
-            while (clientTCP.available()) {
-              char c = clientTCP.read();
-              if (state==true) getBody += String(c);        
-              if (c == '\n') {
-                if (getAll.length()==0) state=true; 
-                getAll = "";
-              } 
-              else if (c != '\r')
-                getAll += String(c);
-              startTimer = millis();
-            }
-            if (getBody.length()>0) break;
-          }
-          clientTCP.stop();
-          Serial.println(getBody);
-          }  else {
-          getBody="Connected to api.telegram.org failed.";
-          Serial.println("Connected to api.telegram.org failed.");
-        }
-      }
-      
-  }
-  esp_camera_fb_return(fb);
-
-  return getBody;
-}
-
-
 void Led_PwrOn(void){
   pinMode(FLASH_LED_PIN, OUTPUT);
   digitalWrite(FLASH_LED_PIN, myStruct.stateFlash);
@@ -683,9 +689,6 @@ void setup(){
   // Connect to Wi-Fi
   initWiFi_PwrOn(NETWORK_SSID, PASSWORD);
 
-  
-  
-  
   // Configure IR sensor
   IR_PwrOn();
 
